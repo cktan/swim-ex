@@ -345,7 +345,6 @@ defmodule SwimEx.Protocol do
       state.membership.members
       |> Enum.filter(fn {_, m} -> m.status in [:alive, :suspect] end)
       |> Enum.map(fn {node, _} -> node end)
-      |> Enum.take_random(state.ping_req_fanout)
 
     msg = {:ack, state.self_id, 0, [event]}
 

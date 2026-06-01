@@ -138,6 +138,38 @@ defmodule SwimEx.ProtocolTest do
     refute_receive {:swim, _, _}, 50
   end
 
+  test "leave/1 notifies all peers, not just fanout subset", %{net: net} do
+    # 5-node cluster; with the old code only ping_req_fanout (3) nodes get
+    # the dead announcement, so 1–2 peers would miss the graceful leave.
+    {_t1, n1} = start_node(net, "n1", 8002)
+    peers =
+      for i <- 2..5 do
+        {_t, n} = start_node(net, "n#{i}", 8002, seeds: [{"n1", 8002}])
+        n
+      end
+
+    Process.sleep(@t * 10)
+
+    # Confirm all peers know n1
+    for n <- peers do
+      assert Enum.any?(SwimEx.Protocol.members(n, []), fn {h, _, _} -> h == "n1" end),
+             "#{n} should know n1 before leave"
+    end
+
+    # Subscribe all peers before leave
+    for n <- peers, do: SwimEx.Protocol.subscribe(n, self())
+
+    SwimEx.Protocol.leave(n1)
+
+    # Tight window: far shorter than one protocol period (@t=50ms) so
+    # gossip from the 3 directly-notified peers cannot reach a 4th peer
+    # in time.  If n1 only broadcasts to ping_req_fanout (3) nodes, the
+    # 4th misses the announcement and the assertion times out.
+    for _n <- peers do
+      assert_receive {:swim, :node_down, {"n1", 8002}}, 5
+    end
+  end
+
   test "relay sends fwd_ack with target id as source, not relay id", %{net: net} do
     n1_id = {"n1", 8001}
     n2_id = {"n2", 8001}
