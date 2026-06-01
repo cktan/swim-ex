@@ -118,15 +118,30 @@ defmodule SwimEx.GossipQueue do
   end
 
   # Greedily pack entries until adding the next would exceed mtu.
-  # Re-encodes incrementally to get accurate ETF size.
-  defp pack_entries([], _mtu, packed), do: {packed, []}
+  # Tracks encoded list size incrementally (O(N)) instead of re-encoding
+  # the full candidate list on every step.
+  #
+  # ETF list size formula:
+  #   empty list  = 2 bytes (version + NIL tag)
+  #   first elem  = base + 4 + elem_standalone_size
+  #   nth elem    = current + elem_standalone_size - 1
+  defp pack_entries(entries, mtu, packed) do
+    n = length(packed)
+    initial_size =
+      if n == 0,
+        do: 2,
+        else: byte_size(:erlang.term_to_binary(Enum.map(packed, & &1.event)))
+    do_pack(entries, mtu, packed, initial_size, n)
+  end
 
-  defp pack_entries([entry | rest], mtu, packed) do
-    candidate_events = Enum.map([entry | packed], & &1.event)
-    encoded_size = byte_size(:erlang.term_to_binary(candidate_events))
+  defp do_pack([], _mtu, packed, _size, _n), do: {packed, []}
 
-    if encoded_size <= mtu do
-      pack_entries(rest, mtu, [entry | packed])
+  defp do_pack([entry | rest], mtu, packed, current_size, n) do
+    esize = byte_size(:erlang.term_to_binary(entry.event))
+    new_size = if n == 0, do: current_size + 4 + esize, else: current_size + esize - 1
+
+    if new_size <= mtu do
+      do_pack(rest, mtu, [entry | packed], new_size, n + 1)
     else
       {packed, [entry | rest]}
     end

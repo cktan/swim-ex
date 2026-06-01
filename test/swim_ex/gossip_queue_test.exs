@@ -128,6 +128,22 @@ defmodule SwimEx.GossipQueueTest do
     assert GossipQueue.size(final_q) == 0
   end
 
+  test "pack size estimate matches actual encoding across a range of mtus" do
+    nodes = for i <- 1..20, do: {"10.0.#{i}.1", 7771}
+    q = Enum.reduce(nodes, GossipQueue.new(), fn n, acc ->
+      GossipQueue.enqueue(acc, {:alive, n, 1})
+    end)
+
+    for mtu <- [60, 100, 200, 500, @big_mtu] do
+      {packed, _} = GossipQueue.pack(q, 20, mtu)
+
+      if packed != [] do
+        actual = byte_size(:erlang.term_to_binary(packed))
+        assert actual <= mtu, "mtu=#{mtu}: packed #{actual} bytes exceeds mtu"
+      end
+    end
+  end
+
   test "transmit_limit/1 is ceil(log2(N+1))" do
     assert GossipQueue.transmit_limit(0) == 1
     assert GossipQueue.transmit_limit(1) == 1
