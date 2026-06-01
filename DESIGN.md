@@ -46,13 +46,19 @@ A gossips    suspect(B, inc)
 
 ## 3. Node Identity
 
-- **Wire and API type:** plain 2-tuple `{"host", port}`
+- **Wire and API type:** plain 3-tuple `{"host", port, "cookie"}`
   - `host` is a string (IP address or hostname)
   - `port` is an integer
-- **Identity key:** the full `{"host", port}` tuple
+  - `cookie` is a string (user-defined opaque datum). It is optionally specified by the user, defaulting to `""`.
+- **Identity key:** the full `{"host", port, "cookie"}` tuple
 - **Assigned by:** caller
-- **Stability:** stable across restarts (same tuple,
-  new incarnation number)
+- **Stability:** stable across restarts (same tuple, new incarnation number). A change in cookie signifies a different node instance even if host/port are reused.
+
+### Node Identification with Cookie
+
+While a node is reachable via its network location (`host` and `port`), the protocol incorporates a `cookie` into the node's strict identity (`{host, port, cookie}`). This cookie allows the application to distinguish between different instances, sessions, or restarts of a node running on the exact same host and port. 
+
+The cookie is optionally specified by the user during node startup or when defining seeds. If not explicitly provided, it defaults to the empty string `""`.
 
 ---
 
@@ -227,7 +233,7 @@ All functions accept an optional `name` argument
 ```elixir
 SWIM.members(name \\ :swim, opts \\ [])
 # opts: [include_dead: true]  ← default true
-# returns: [{"host", port, :alive | :suspect | :dead}]
+# returns: [{"host", port, "cookie", :alive | :suspect | :dead}]
 ```
 
 ### Event subscription
@@ -240,9 +246,9 @@ SWIM.unsubscribe(name \\ :swim)  # deregisters self()
 Messages delivered to the subscriber process:
 
 ```elixir
-{:swim, :node_up,      {"host", port}}
-{:swim, :node_down,    {"host", port}}
-{:swim, :node_suspect, {"host", port}}
+{:swim, :node_up,      {"host", port, "cookie"}}
+{:swim, :node_down,    {"host", port, "cookie"}}
+{:swim, :node_suspect, {"host", port, "cookie"}}
 ```
 
 The library monitors each subscriber via
@@ -274,9 +280,9 @@ For a silent stop (no dead broadcast), call
 **Membership transitions:**
 
 ```elixir
-[:swim, :node, :up]      # %{node: {"host", port}}
-[:swim, :node, :down]    # %{node: {"host", port}}
-[:swim, :node, :suspect] # %{node: {"host", port}}
+[:swim, :node, :up]      # %{node: {"host", port, "cookie"}}
+[:swim, :node, :down]    # %{node: {"host", port, "cookie"}}
+[:swim, :node, :suspect] # %{node: {"host", port, "cookie"}}
 ```
 
 **Metrics:**
@@ -293,9 +299,9 @@ Set on all protocol log lines:
 
 ```elixir
 [
-  swim_node:  {"host", port},  # this node
+  swim_node:  {"host", port, "cookie"},  # this node
   swim_event: :suspect,        # event being processed
-  swim_peer:  {"host", port}   # peer involved, when relevant
+  swim_peer:  {"host", port, "cookie"}   # peer involved, when relevant
 ]
 ```
 

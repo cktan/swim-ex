@@ -8,8 +8,9 @@ defmodule SwimEx.CodecTest do
 
   defp node_id do
     gen all host <- string(:alphanumeric, min_length: 1, max_length: 20),
-            port <- integer(1..65535) do
-      {host, port}
+            port <- integer(1..65535),
+            cookie <- string(:alphanumeric, max_length: 5) do
+      {host, port, cookie}
     end
   end
 
@@ -75,13 +76,13 @@ defmodule SwimEx.CodecTest do
 
   test "encode returns :too_large when payload exceeds MTU" do
     huge_host = String.duplicate("x", 2000)
-    events = for i <- 1..50, do: {:alive, {huge_host, i}, i}
-    msg = {:ping, {"sender", 7771}, 1, events}
+    events = for i <- 1..50, do: {:alive, {huge_host, i, ""}, i}
+    msg = {:ping, {"sender", 7771, ""}, 1, events}
     assert {:error, :too_large} = Codec.encode(msg)
   end
 
   test "small message encodes and decodes" do
-    msg = {:ping, {"10.0.0.1", 7771}, 42, [{:alive, {"10.0.0.2", 7771}, 100}]}
+    msg = {:ping, {"10.0.0.1", 7771, ""}, 42, [{:alive, {"10.0.0.2", 7771, "abc"}, 100}]}
     assert {:ok, bin} = Codec.encode(msg)
     assert {:ok, ^msg} = Codec.decode(bin)
     assert byte_size(bin) <= Codec.mtu()

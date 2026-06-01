@@ -38,6 +38,11 @@ defmodule SwimEx.Transport.InMemory do
   end
 
   @impl SwimEx.Transport
+  def send(server, {_, _, _} = to, data) when is_binary(data) do
+    GenServer.cast(server, {:send, to, data})
+  end
+
+  @impl SwimEx.Transport
   def send(server, to, data) when is_binary(data) do
     GenServer.cast(server, {:send, to, data})
   end

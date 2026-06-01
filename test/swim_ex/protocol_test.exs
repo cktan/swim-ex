@@ -14,7 +14,7 @@ defmodule SwimEx.ProtocolTest do
     {:ok, _t} =
       InMemory.start_link(
         network: net,
-        identity: {host, port},
+        identity: {host, port, ""},
         name: transport_name
       )
 
@@ -61,10 +61,10 @@ defmodule SwimEx.ProtocolTest do
     members1 = SwimEx.Protocol.members(n1, include_dead: false)
     members2 = SwimEx.Protocol.members(n2, include_dead: false)
 
-    assert Enum.any?(members1, fn {h, p, _} -> h == "n2" and p == 7001 end),
+    assert Enum.any?(members1, fn {h, p, _, _} -> h == "n2" and p == 7001 end),
            "n1 should know about n2, got: #{inspect(members1)}"
 
-    assert Enum.any?(members2, fn {h, p, _} -> h == "n1" and p == 7001 end),
+    assert Enum.any?(members2, fn {h, p, _, _} -> h == "n1" and p == 7001 end),
            "n2 should know about n1, got: #{inspect(members2)}"
   end
 
@@ -74,7 +74,7 @@ defmodule SwimEx.ProtocolTest do
 
     {_t2, _n2} = start_node(net, "n2", 7002, seeds: [{"n1", 7002}])
 
-    assert_receive {:swim, :node_up, {"n2", 7002}}, @t * 10
+    assert_receive {:swim, :node_up, {"n2", 7002, ""}}, @t * 10
   end
 
   test "node_suspect event fired when peer stops responding", %{net: net} do
@@ -87,7 +87,7 @@ defmodule SwimEx.ProtocolTest do
     # Cut n1's outbound traffic by setting 100% loss
     InMemory.set_fault(t2, packet_loss: 1.0)
 
-    assert_receive {:swim, :node_suspect, {"n1", 7003}}, @t * 10
+    assert_receive {:swim, :node_suspect, {"n1", 7003, ""}}, @t * 10
   end
 
   test "node declared dead after suspicion timeout", %{net: net} do
@@ -100,8 +100,8 @@ defmodule SwimEx.ProtocolTest do
     # Make n2 disappear completely
     InMemory.set_fault(t2, packet_loss: 1.0)
 
-    assert_receive {:swim, :node_suspect, {"n2", 7004}}, @t * 10
-    assert_receive {:swim, :node_down, {"n2", 7004}}, @t * 15
+    assert_receive {:swim, :node_suspect, {"n2", 7004, ""}}, @t * 10
+    assert_receive {:swim, :node_down, {"n2", 7004, ""}}, @t * 15
   end
 
   test "members/2 returns alive and suspect, filters dead by default", %{net: net} do
@@ -114,12 +114,12 @@ defmodule SwimEx.ProtocolTest do
     InMemory.set_fault(t2, packet_loss: 1.0)
 
     # Wait for dead event, then check immediately before GC runs
-    assert_receive {:swim, :node_down, {"n2", 7005}}, @t * 15
+    assert_receive {:swim, :node_down, {"n2", 7005, ""}}, @t * 15
 
     all = SwimEx.Protocol.members(n1, include_dead: true)
     alive_only = SwimEx.Protocol.members(n1, include_dead: false)
 
-    assert Enum.any?(all, fn {h, p, s} -> h == "n2" and p == 7005 and s == :dead end),
+    assert Enum.any?(all, fn {h, p, _, s} -> h == "n2" and p == 7005 and s == :dead end),
            "n2 should be dead in full list, got: #{inspect(all)}"
 
     refute Enum.any?(alive_only, fn {h, p, _} -> h == "n2" and p == 7005 end),
@@ -152,7 +152,7 @@ defmodule SwimEx.ProtocolTest do
 
     # Confirm all peers know n1
     for n <- peers do
-      assert Enum.any?(SwimEx.Protocol.members(n, []), fn {h, _, _} -> h == "n1" end),
+      assert Enum.any?(SwimEx.Protocol.members(n, []), fn {h, _, _, _} -> h == "n1" end),
              "#{n} should know n1 before leave"
     end
 
@@ -166,13 +166,13 @@ defmodule SwimEx.ProtocolTest do
     # in time.  If n1 only broadcasts to ping_req_fanout (3) nodes, the
     # 4th misses the announcement and the assertion times out.
     for _n <- peers do
-      assert_receive {:swim, :node_down, {"n1", 8002}}, 5
+      assert_receive {:swim, :node_down, {"n1", 8002, ""}}, 5
     end
   end
 
   test "relay sends fwd_ack with target id as source, not relay id", %{net: net} do
-    n1_id = {"n1", 8001}
-    n2_id = {"n2", 8001}
+    n1_id = {"n1", 8001, ""}
+    n2_id = {"n2", 8001, ""}
 
     # n1: bare transport so test process receives swim_packets directly
     n1_transport = :"transport_n1_8001"
@@ -205,7 +205,7 @@ defmodule SwimEx.ProtocolTest do
 
     Process.sleep(@t * 6)
 
-    assert Enum.any?(SwimEx.Protocol.members(n2, include_dead: false), fn {h, _, _} ->
+    assert Enum.any?(SwimEx.Protocol.members(n2, include_dead: false), fn {h, _, _, _} ->
              h == "n1"
            end)
 
@@ -214,7 +214,7 @@ defmodule SwimEx.ProtocolTest do
 
     members = SwimEx.Protocol.members(n2, include_dead: false)
 
-    refute Enum.any?(members, fn {h, _, _} -> h == "n1" end),
+    refute Enum.any?(members, fn {h, _, _, _} -> h == "n1" end),
            "n1 should have left, got: #{inspect(members)}"
   end
 end

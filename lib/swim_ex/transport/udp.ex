@@ -21,6 +21,9 @@ defmodule SwimEx.Transport.UDP do
   end
 
   @impl SwimEx.Transport
+  def send(server, {host, port, _cookie}, data), do: send(server, {host, port}, data)
+
+  @impl SwimEx.Transport
   def send(server, {host, port}, data) when is_binary(data) do
     case resolve(host) do
       {:ok, ip} ->

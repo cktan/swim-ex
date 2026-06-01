@@ -56,8 +56,10 @@ All options are passed to `SwimEx.Supervisor.start_link/1`.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `:host` | `String.t()` | **required** | This node's hostname or IP |
-| `:port` | `integer` | **required** | UDP port to bind |
+| `:port` | `integer` | (req) | UDP port to bind |
+| `:cookie` | `string` | `""` | User-defined node cookie |
 | `:name` | `atom` | `:swim` | Instance name (for multi-cluster) |
+
 | `:seeds` | `[{host, port}]` | `[]` | Seed nodes for join |
 | `:protocol_period` | `ms` | `1000` | How often to probe one peer |
 | `:ping_timeout` | `ms` | `200` | Direct ack wait time |
@@ -93,18 +95,18 @@ All functions accept an optional `name` argument (default
 ```elixir
 # All alive + suspect nodes (dead filtered by default)
 SwimEx.members()
-#=> [{"10.0.0.2", 7771, :alive}, {"10.0.0.3", 7771, :suspect}]
+#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.3", 7771, "c1", :suspect}]
 
 # Include dead entries (useful for debugging)
 SwimEx.members(include_dead: true)
-#=> [{"10.0.0.2", 7771, :alive}, {"10.0.0.4", 7771, :dead}]
+#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.4", 7771, "c1", :dead}]
 
 # Named instance
 SwimEx.members(:my_cluster)
 SwimEx.members(:my_cluster, include_dead: false)
 ```
 
-Each member is a 3-tuple `{host, port, status}` where
+Each member is a 4-tuple `{host, port, cookie, status}` where
 `host` is the string passed at startup and `status` is
 `:alive`, `:suspect`, or `:dead`.
 
@@ -121,9 +123,9 @@ SwimEx.subscribe(:my_cluster)
 The calling process receives messages:
 
 ```elixir
-{:swim, :node_up,      {"10.0.0.2", 7771}}  # node joined or recovered
-{:swim, :node_down,    {"10.0.0.2", 7771}}  # node declared dead
-{:swim, :node_suspect, {"10.0.0.2", 7771}}  # node missed a ping
+{:swim, :node_up,      {"10.0.0.2", 7771, "c1"}}  # node joined or recovered
+{:swim, :node_down,    {"10.0.0.2", 7771, "c1"}}  # node declared dead
+{:swim, :node_suspect, {"10.0.0.2", 7771, "c1"}}  # node missed a ping
 ```
 
 Dead subscriber processes are removed automatically via

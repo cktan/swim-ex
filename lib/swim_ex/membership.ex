@@ -17,7 +17,7 @@ defmodule SwimEx.Membership do
     and node is not already dead.
   """
 
-  @type node_id :: {String.t(), :inet.port_number()}
+  @type node_id :: {String.t(), :inet.port_number(), String.t()}
   @type status :: :alive | :suspect | :dead
   @type member :: %{
           status: status(),
@@ -37,56 +37,55 @@ defmodule SwimEx.Membership do
   end
 
   @spec apply_event(t(), SwimEx.Codec.event()) :: t()
-  def apply_event(%__MODULE__{} = state, {:alive, node, inc}) do
+  def apply_event(%__MODULE__{} = state, {status, node, inc}) do
+    node =
+      case node do
+        {h, p} -> {h, p, ""}
+        other -> other
+      end
+
     case Map.get(state.members, node) do
       nil ->
-        put_member(state, node, :alive, inc)
+        if status == :alive do
+          put_member(state, node, :alive, inc)
+        else
+          state
+        end
 
       %{status: :dead, incarnation: current_inc} when inc > current_inc ->
-        put_member(state, node, :alive, inc)
+        if status == :alive do
+          put_member(state, node, :alive, inc)
+        else
+          state
+        end
 
       %{status: :dead} ->
         state
 
-      %{incarnation: current_inc} when inc > current_inc ->
-        put_member(state, node, :alive, inc)
+      %{status: current_status, incarnation: current_inc} ->
+        cond do
+          # Higher incarnation always wins
+          inc > current_inc ->
+            put_member(state, node, status, inc)
 
-      _ ->
-        state
-    end
-  end
+          # Same incarnation, status precedence: dead > suspect > alive
+          inc == current_inc ->
+            case {current_status, status} do
+              {_, :dead} ->
+                now = System.monotonic_time(:millisecond)
+                entry = %{status: :dead, incarnation: inc, dead_at: now}
+                %{state | members: Map.put(state.members, node, entry)}
 
-  def apply_event(%__MODULE__{} = state, {:suspect, node, inc}) do
-    case Map.get(state.members, node) do
-      nil ->
-        state
+              {:alive, :suspect} ->
+                put_member(state, node, :suspect, inc)
 
-      %{status: :dead} ->
-        state
+              _ ->
+                state
+            end
 
-      %{incarnation: current_inc} when inc >= current_inc ->
-        put_member(state, node, :suspect, inc)
-
-      _ ->
-        state
-    end
-  end
-
-  def apply_event(%__MODULE__{} = state, {:dead, node, inc}) do
-    case Map.get(state.members, node) do
-      nil ->
-        state
-
-      %{status: :dead} ->
-        state
-
-      %{incarnation: current_inc} when inc >= current_inc ->
-        now = System.monotonic_time(:millisecond)
-        entry = %{status: :dead, incarnation: inc, dead_at: now}
-        %{state | members: Map.put(state.members, node, entry)}
-
-      _ ->
-        state
+          true ->
+            state
+        end
     end
   end
 
@@ -109,24 +108,42 @@ defmodule SwimEx.Membership do
   end
 
   @spec get(t(), node_id()) :: member() | nil
-  def get(%__MODULE__{} = state, node), do: Map.get(state.members, node)
+  def get(%__MODULE__{} = state, node) do
+    node =
+      case node do
+        {h, p} -> {h, p, ""}
+        other -> other
+      end
+
+    Map.get(state.members, node)
+  end
 
   @spec member_count(t()) :: non_neg_integer()
   def member_count(%__MODULE__{} = state) do
     Enum.count(state.members, fn {_, m} -> m.status in [:alive, :suspect] end)
   end
 
-  @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), status()}]
+  @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), status()}]
   def list(%__MODULE__{} = state, opts \\ []) do
     include_dead = Keyword.get(opts, :include_dead, true)
 
     state.members
     |> Enum.reject(fn {_, m} -> not include_dead and m.status == :dead end)
-    |> Enum.map(fn {{host, port}, m} -> {host, port, m.status} end)
+    |> Enum.map(fn
+      {{host, port, cookie}, m} -> {host, port, cookie, m.status}
+      {{host, port}, m} -> {host, port, "", m.status}
+    end)
   end
 
   defp put_member(state, node, status, inc) do
-    entry = %{status: status, incarnation: inc, dead_at: nil}
+    node =
+      case node do
+        {h, p} -> {h, p, ""}
+        other -> other
+      end
+
+    dead_at = if status == :dead, do: System.monotonic_time(:millisecond)
+    entry = %{status: status, incarnation: inc, dead_at: dead_at}
     %{state | members: Map.put(state.members, node, entry)}
   end
 end

@@ -20,7 +20,7 @@ defmodule SwimEx.IntegrationTest do
     {:ok, _} =
       InMemory.start_link(
         network: net,
-        identity: {host, port},
+        identity: {host, port, ""},
         name: transport_name
       )
 
@@ -68,30 +68,10 @@ defmodule SwimEx.IntegrationTest do
   end
 
   defp all_know_each_other(names) do
-    all_peers =
-      names
-      |> Enum.map(fn name ->
-        SwimEx.Protocol.members(name, include_dead: false)
-        |> Enum.map(fn {h, p, _} -> {h, p} end)
-        |> MapSet.new()
-      end)
-
-    Enum.all?(Enum.with_index(names), fn {name, i} ->
-      expected =
-        names
-        |> Enum.with_index()
-        |> Enum.reject(fn {_, j} -> j == i end)
-        |> Enum.map(fn {n, _} ->
-          # extract host+port from node name encoding
-          members = Enum.at(all_peers, i)
-          _ = {n, members}
-          true
-        end)
-
-      _ = expected
+    Enum.all?(names, fn name ->
       # Just check this node has N-1 peers
-      member_count = SwimEx.Protocol.members(name, include_dead: false) |> length()
-      member_count == length(names) - 1
+      members = SwimEx.Protocol.members(name, include_dead: false)
+      length(members) == length(names) - 1
     end)
   end
 
@@ -146,8 +126,8 @@ defmodule SwimEx.IntegrationTest do
     # Drop all outbound packets from c1 → c1 can't ack pings
     InMemory.set_fault(t1, packet_loss: 1.0)
 
-    assert_receive {:swim, :node_suspect, {"c1", 3001}}, @t * 10
-    assert_receive {:swim, :node_down, {"c1", 3001}}, @t * 20
+    assert_receive {:swim, :node_suspect, {"c1", 3001, ""}}, @t * 10
+    assert_receive {:swim, :node_down, {"c1", 3001, ""}}, @t * 20
   end
 
   test "3-node cluster detects dead node via suspect + indirect", %{net: net} do
@@ -165,8 +145,8 @@ defmodule SwimEx.IntegrationTest do
     InMemory.set_fault(t2, packet_loss: 1.0)
 
     # Both n1 and n3 should eventually declare n2 dead
-    assert_receive {:swim, :node_down, {"d2", 4001}}, @t * 20
-    assert_receive {:swim, :node_down, {"d2", 4001}}, @t * 20
+    assert_receive {:swim, :node_down, {"d2", 4001, ""}}, @t * 20
+    assert_receive {:swim, :node_down, {"d2", 4001, ""}}, @t * 20
   end
 
   # --- Graceful leave ---
@@ -184,14 +164,14 @@ defmodule SwimEx.IntegrationTest do
 
     SwimEx.Protocol.leave(n1)
 
-    assert_receive {:swim, :node_down, {"e1", 5001}}, @t * 5
-    assert_receive {:swim, :node_down, {"e1", 5001}}, @t * 5
+    assert_receive {:swim, :node_down, {"e1", 5001, ""}}, @t * 5
+    assert_receive {:swim, :node_down, {"e1", 5001, ""}}, @t * 5
 
     members_n2 = SwimEx.Protocol.members(n2, include_dead: false)
     members_n3 = SwimEx.Protocol.members(n3, include_dead: false)
 
-    refute Enum.any?(members_n2, fn {h, _, _} -> h == "e1" end)
-    refute Enum.any?(members_n3, fn {h, _, _} -> h == "e1" end)
+    refute Enum.any?(members_n2, fn {h, _, _, _} -> h == "e1" end)
+    refute Enum.any?(members_n3, fn {h, _, _, _} -> h == "e1" end)
   end
 
   # --- Telemetry ---
@@ -257,8 +237,8 @@ defmodule SwimEx.IntegrationTest do
 
     # n3 should still be alive after a few more periods
     members = SwimEx.Protocol.members(n2, include_dead: false)
-    n3_entry = Enum.find(members, fn {h, _, _} -> h == "h3" end)
+    n3_entry = Enum.find(members, fn {h, _, _, _} -> h == "h3" end)
     assert n3_entry != nil, "n3 should still be present"
-    assert elem(n3_entry, 2) == :alive, "n3 should be alive after self-refutation, got: #{inspect(n3_entry)}"
+    assert elem(n3_entry, 3) == :alive, "n3 should be alive after self-refutation, got: #{inspect(n3_entry)}"
   end
 end

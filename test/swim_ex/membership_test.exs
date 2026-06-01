@@ -4,15 +4,16 @@ defmodule SwimEx.MembershipTest do
 
   alias SwimEx.Membership
 
-  @node_a {"10.0.0.1", 7771}
-  @node_b {"10.0.0.2", 7771}
+  @node_a {"10.0.0.1", 7771, ""}
+  @node_b {"10.0.0.2", 7771, ""}
 
   # --- Generators ---
 
   defp node_id do
     gen all host <- string(:alphanumeric, min_length: 1, max_length: 10),
-            port <- integer(1..65535) do
-      {host, port}
+            port <- integer(1..65535),
+            cookie <- string(:alphanumeric, max_length: 5) do
+      {host, port, cookie}
     end
   end
 
@@ -183,7 +184,7 @@ defmodule SwimEx.MembershipTest do
 
     result = Membership.list(state, include_dead: false)
     assert length(result) == 1
-    assert {"10.0.0.2", 7771, :alive} in result
+    assert {"10.0.0.2", 7771, "", :alive} in result
   end
 
   # --- Property tests ---

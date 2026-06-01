@@ -15,11 +15,12 @@ children = [
 ]
 
 SwimEx.subscribe()
-# receives {:swim, :node_up, {"10.0.0.2", 7771}} etc.
+# receives {:swim, :node_up, {"10.0.0.2", 7771, "c1"}} etc.
 
 SwimEx.members()
-#=> [{"10.0.0.2", 7771, :alive}, {"10.0.0.3", 7771, :suspect}]
+#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.3", 7771, "c1", :suspect}]
 ```
+
 
 ---
 
@@ -77,7 +78,7 @@ implementation small.
 
 ### Stable identity, time-seeded incarnation
 
-A node's identity is its `{host, port}` pair, stable
+A node's identity is its `{host, port, cookie}` tuple, stable
 across restarts. On each startup, the incarnation
 number is seeded from `System.system_time(:millisecond)`
 so a restarted node can always override stale dead

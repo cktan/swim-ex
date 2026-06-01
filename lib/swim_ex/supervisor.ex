@@ -16,6 +16,7 @@ defmodule SwimEx.Supervisor do
 
     * `:host` — (required) this node's hostname or IP string
     * `:port` — (required) UDP port to bind
+    * `:cookie` — optional string cookie, default ""
     * `:name` — SWIM instance name atom, default `:swim`
     * `:seeds` — list of `{host, port}` seed nodes, default `[]`
     * `:protocol_period` — ms, default 1000

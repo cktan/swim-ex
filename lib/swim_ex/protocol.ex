@@ -39,6 +39,7 @@ defmodule SwimEx.Protocol do
 
   defstruct [
     :self_id,
+    :cookie,
     :incarnation,
     :transport,
     :transport_mod,
@@ -89,14 +90,16 @@ defmodule SwimEx.Protocol do
   def init(opts) do
     host = Keyword.fetch!(opts, :host)
     port = Keyword.fetch!(opts, :port)
+    cookie = Keyword.get(opts, :cookie, "")
     transport = Keyword.fetch!(opts, :transport)
     transport_mod = Keyword.get(opts, :transport_mod, SwimEx.Transport.UDP)
 
     incarnation = System.system_time(:millisecond)
-    self_id = {host, port}
+    self_id = {host, port, cookie}
 
     state = %__MODULE__{
       self_id: self_id,
+      cookie: cookie,
       incarnation: incarnation,
       transport: transport,
       transport_mod: transport_mod,
@@ -114,7 +117,7 @@ defmodule SwimEx.Protocol do
       suspicion_timers: %{},
       seq: 0,
       subscribers: %{},
-      seeds: Keyword.get(opts, :seeds, []),
+      seeds: normalize_seeds(Keyword.get(opts, :seeds, [])),
       ping_times: %{}
     }
 
@@ -661,5 +664,12 @@ defmodule SwimEx.Protocol do
         duration = System.monotonic_time(:millisecond) - sent_at
         :telemetry.execute([:swim, :ping, :rtt], %{duration: duration}, %{node: state.self_id, peer: target})
     end
+  end
+
+  defp normalize_seeds(seeds) do
+    Enum.map(seeds, fn
+      {host, port} -> {host, port, ""}
+      {host, port, cookie} -> {host, port, cookie}
+    end)
   end
 end

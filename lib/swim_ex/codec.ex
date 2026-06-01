@@ -1,7 +1,7 @@
 defmodule SwimEx.Codec do
   @mtu 1400
 
-  @type node_id :: {String.t(), :inet.port_number()}
+  @type node_id :: {String.t(), :inet.port_number(), String.t()}
   @type incarnation :: non_neg_integer()
 
   @type event ::
