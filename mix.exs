@@ -11,7 +11,8 @@ defmodule SwimEx.MixProject do
       deps: deps(),
       description: "SWIM+INF+Susp cluster membership library",
       package: package(),
-      name: "swim_ex"
+      name: "swim_ex",
+      docs: [main: "readme", extras: ["README.md"]]
     ]
   end
 
@@ -27,14 +28,16 @@ defmodule SwimEx.MixProject do
   defp deps do
     [
       {:telemetry, "~> 1.0"},
-      {:stream_data, "~> 1.0", only: :test}
+      {:stream_data, "~> 1.0", only: :test},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{}
+      links: %{"GitHub" => "https://github.com/cktan/swim-ex"},
+      maintainers: ["CK Tan"]
     ]
   end
 end

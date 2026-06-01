@@ -11,7 +11,7 @@ children = [
   {SwimEx.Supervisor,
    host: "10.0.0.1",
    port: 7771,
-   seeds: [{"10.0.0.2", 7771}]}
+   seeds: [{"10.0.0.2", 7771}, {"10.0.0.3", 7771}]}
 ]
 
 SwimEx.subscribe()

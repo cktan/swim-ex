@@ -34,12 +34,12 @@ children = [
 ]
 Supervisor.start_link(children, strategy: :one_for_one)
 
-# Node 2 (joins via seed)
+# Node 2 (joins — all seeds pinged until no longer alone)
 children = [
   {SwimEx.Supervisor,
    host: "10.0.0.2",
    port: 7771,
-   seeds: [{"10.0.0.1", 7771}]}
+   seeds: [{"10.0.0.1", 7771}, {"10.0.0.3", 7771}]}
 ]
 Supervisor.start_link(children, strategy: :one_for_one)
 ```

@@ -30,6 +30,10 @@ text only — do not reformat code blocks, tables, or headings.
   or `HISTORY.md`** — use the `issue-tracker` skill
   (`.claude/skills/issue-tracker/scripts/issue.py`) to
   maintain id and formatting invariants.
+- **When opening or closing any issue, invoke the
+  `issue-tracker` skill** — do not call `issue.py` directly
+  via Bash; always go through the skill so hooks and
+  formatting rules are applied consistently.
 
 ---
 
