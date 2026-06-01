@@ -88,28 +88,28 @@ The cookie is optionally specified by the user during node startup or when defin
 
 ```elixir
 # ping
-{:ping, sender :: {host, port}, seq :: non_neg_integer,
+{:ping, sender :: {host, port, cookie}, seq :: non_neg_integer,
         events :: [event]}
 
 # ack
-{:ack, sender :: {host, port}, seq :: non_neg_integer,
+{:ack, sender :: {host, port, cookie}, seq :: non_neg_integer,
        events :: [event]}
 
 # ping_req (A asks C to ping B)
-{:ping_req, sender :: {host, port}, seq :: non_neg_integer,
-            target :: {host, port}, events :: [event]}
+{:ping_req, sender :: {host, port, cookie}, seq :: non_neg_integer,
+            target :: {host, port, cookie}, events :: [event]}
 
 # forwarded ack (C tells A that B responded)
-{:fwd_ack, sender :: {host, port}, seq :: non_neg_integer,
-           source :: {host, port}, events :: [event]}
+{:fwd_ack, sender :: {host, port, cookie}, seq :: non_neg_integer,
+           source :: {host, port, cookie}, events :: [event]}
 ```
 
 - **Event shape:**
 
 ```elixir
-{:alive,   {host, port}, incarnation :: non_neg_integer}
-{:suspect, {host, port}, incarnation :: non_neg_integer}
-{:dead,    {host, port}, incarnation :: non_neg_integer}
+{:alive,   {host, port, cookie}, incarnation :: non_neg_integer}
+{:suspect, {host, port, cookie}, incarnation :: non_neg_integer}
+{:dead,    {host, port, cookie}, incarnation :: non_neg_integer}
 ```
 
 ---

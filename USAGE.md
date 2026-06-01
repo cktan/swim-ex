@@ -60,7 +60,7 @@ All options are passed to `SwimEx.Supervisor.start_link/1`.
 | `:cookie` | `string` | `""` | User-defined node cookie |
 | `:name` | `atom` | `:swim` | Instance name (for multi-cluster) |
 
-| `:seeds` | `[{host, port}]` | `[]` | Seed nodes for join |
+| `:seeds` | `[{host, port} \| {host, port, cookie}]` | `[]` | Seed nodes for join |
 | `:protocol_period` | `ms` | `1000` | How often to probe one peer |
 | `:ping_timeout` | `ms` | `200` | Direct ack wait time |
 | `:ping_req_fanout` | `integer` | `3` | Indirect ping relay count |
@@ -177,7 +177,7 @@ handlers using `:telemetry.attach/4`.
 [:swim, :node, :suspect]  — node missed a ping
 ```
 
-Metadata map: `%{node: {host, port}, peer: {host, port}}`
+Metadata map: `%{node: {host, port, cookie}, peer: {host, port, cookie}}`
 (`node` = this node, `peer` = affected node).
 
 ### Metric events
@@ -214,9 +214,9 @@ All protocol log lines include structured metadata:
 
 | Key | Value |
 |-----|-------|
-| `swim_node` | `{host, port}` — this node |
+| `swim_node` | `{host, port, cookie}` — this node |
 | `swim_event` | atom — event being logged |
-| `swim_peer` | `{host, port}` — peer involved |
+| `swim_peer` | `{host, port, cookie}` — peer involved |
 
 Configure a metadata-aware formatter (e.g. `LoggerJSON`)
 to expose these fields in structured logs.
@@ -249,11 +249,12 @@ incarnation and broadcasts `alive(self, new_inc)`.
 
 ## Node identity and restarts
 
-A node is identified by `{host, port}`. Identity is
-**stable across restarts** — the same address reconnects
-as the same logical node. Stale dead events from a
-previous incarnation are rejected because the restarted
-node seeds its incarnation number from
+A node is identified by `{host, port, cookie}`. Identity
+is **stable across restarts** — the same tuple reconnects
+as the same logical node. A different cookie on the same
+address is treated as a distinct node. Stale dead events
+from a previous incarnation are rejected because the
+restarted node seeds its incarnation number from
 `System.system_time(:millisecond)`, which is always
 higher than any incarnation from the prior run.
 
