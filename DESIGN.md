@@ -135,7 +135,7 @@ opts. Defaults are tuned for an 8-node cluster.
 
 ## 8. Dissemination
 
-- **Transmit multiplier:** `ceil(log(N+1))` where
+- **Transmit multiplier:** `ceil(log₂(N+1)) × 3` where
   `N` = count of alive + suspect nodes. Recalculated
   dynamically as membership changes.
 - **Piggyback budget:** fill up to MTU (1400 bytes)
@@ -257,9 +257,10 @@ SWIM.leave(name \\ :swim)
 
 1. Increments own incarnation number.
 2. Broadcasts `dead(self, new_inc)` directly to
-   `k=3` random peers (not via gossip queue).
-3. Blocks until the UDP sends complete.
-4. Stops the supervisor tree.
+   `max(⌈N×0.25⌉, 8)` random peers (not via gossip
+   queue), where `N` is the number of alive + suspect
+   peers.
+3. Stops the supervisor tree.
 
 For a silent stop (no dead broadcast), call
 `Supervisor.stop/1` directly.

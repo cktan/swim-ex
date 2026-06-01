@@ -136,8 +136,9 @@ SwimEx.leave()
 ```
 
 Increments incarnation, broadcasts a dead announcement
-directly to up to `ping_req_fanout` peers, then stops
-the supervisor tree. Blocks until UDP sends complete.
+directly to `max(⌈N×0.25⌉, 8)` random peers (where `N`
+is the number of alive + suspect peers), then stops the
+supervisor tree.
 
 For an ungraceful stop (no dead broadcast), call
 `Supervisor.stop/1` directly on the supervisor.
