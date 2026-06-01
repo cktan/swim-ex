@@ -138,6 +138,35 @@ defmodule SwimEx.ProtocolTest do
     refute_receive {:swim, _, _}, 50
   end
 
+  test "relay sends fwd_ack with target id as source, not relay id", %{net: net} do
+    n1_id = {"n1", 8001}
+    n2_id = {"n2", 8001}
+
+    # n1: bare transport so test process receives swim_packets directly
+    n1_transport = :"transport_n1_8001"
+    {:ok, _} = InMemory.start_link(network: net, identity: n1_id, name: n1_transport)
+    InMemory.set_receiver(n1_transport, self())
+
+    # n2: real protocol node (probe target)
+    {_t2, _} = start_node(net, "n2", 8001)
+
+    # n3: real protocol node (relay)
+    {_t3, n3_node} = start_node(net, "n3", 8001)
+    Process.sleep(@ping_timeout)
+
+    # Ask n3 to relay a ping to n2 on behalf of n1
+    seq = 42
+    {:ok, req_data} = SwimEx.Codec.encode({:ping_req, n1_id, seq, n2_id, []})
+    send(GenServer.whereis(n3_node), {:swim_packet, n1_id, req_data})
+
+    # Wait for fwd_ack to arrive at n1 transport
+    assert_receive {:swim_packet, _from, raw}, @t * 4
+
+    {:ok, {:fwd_ack, _relay, _recv_seq, source, _events}} = SwimEx.Codec.decode(raw)
+    assert source == n2_id,
+           "fwd_ack source should be target #{inspect(n2_id)}, got #{inspect(source)}"
+  end
+
   test "leave/1 removes node from peers' membership", %{net: net} do
     {_t1, n1} = start_node(net, "n1", 7007)
     {_t2, n2} = start_node(net, "n2", 7007, seeds: [{"n1", 7007}])

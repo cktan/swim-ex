@@ -426,10 +426,10 @@ defmodule SwimEx.Protocol do
         ping_times = Map.delete(state.ping_times, seq)
         %{state | pending: pending, ping_times: ping_times}
 
-      {{_target, ref, {:relay_to, original_sender, orig_seq}}, pending} ->
+      {{target, ref, {:relay_to, original_sender, orig_seq}}, pending} ->
         Process.cancel_timer(ref)
         # Forward ack back to original ping-req sender
-        fwd_msg = {:fwd_ack, state.self_id, orig_seq, state.self_id, []}
+        fwd_msg = {:fwd_ack, state.self_id, orig_seq, target, []}
 
         case Codec.encode(fwd_msg) do
           {:ok, data} -> transport_send(state, original_sender, data)
