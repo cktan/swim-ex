@@ -143,15 +143,13 @@ defmodule SwimEx.GossipQueueTest do
       end
     end
   end
-
-  test "transmit_limit/1 is ceil(log2(N+1))" do
+  test "transmit_limit/1 is ceil(log2(N+1)) * 3" do
     assert GossipQueue.transmit_limit(0) == 1
-    assert GossipQueue.transmit_limit(1) == 1
-    assert GossipQueue.transmit_limit(3) == 2
-    assert GossipQueue.transmit_limit(7) == 3
-    assert GossipQueue.transmit_limit(8) == 4
-    assert GossipQueue.transmit_limit(15) == 4
-    assert GossipQueue.transmit_limit(16) == 5
+    assert GossipQueue.transmit_limit(1) == 3
+    assert GossipQueue.transmit_limit(7) == 9
+    assert GossipQueue.transmit_limit(8) == 12
+    assert GossipQueue.transmit_limit(15) == 12
+    assert GossipQueue.transmit_limit(16) == 15
   end
 
   # --- Property tests ---

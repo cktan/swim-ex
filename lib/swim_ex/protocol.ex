@@ -341,10 +341,13 @@ defmodule SwimEx.Protocol do
 
   defp broadcast_dead_self(state) do
     event = {:dead, state.self_id, state.incarnation}
-    targets =
+    peers =
       state.membership.members
       |> Enum.filter(fn {_, m} -> m.status in [:alive, :suspect] end)
       |> Enum.map(fn {node, _} -> node end)
+
+    fanout = max(ceil(length(peers) * 0.25), 8)
+    targets = Enum.take_random(peers, fanout)
 
     msg = {:ack, state.self_id, 0, [event]}
 
@@ -415,12 +418,14 @@ defmodule SwimEx.Protocol do
 
       {{target, ref, :direct}, pending} ->
         Process.cancel_timer(ref)
+        state = update_node_alive(target, state)
         emit_rtt(seq, target, state)
         ping_times = Map.delete(state.ping_times, seq)
         %{state | pending: pending, ping_times: ping_times}
 
       {{target, ref, :indirect}, pending} ->
         Process.cancel_timer(ref)
+        state = update_node_alive(target, state)
         emit_rtt(seq, target, state)
         ping_times = Map.delete(state.ping_times, seq)
         %{state | pending: pending, ping_times: ping_times}
@@ -453,13 +458,16 @@ defmodule SwimEx.Protocol do
         notify_subscribers({:swim, :node_up, node}, state)
 
       %{status: prev_status, incarnation: current_inc} ->
-        new_inc = current_inc + 1
-        membership = Membership.apply_event(state.membership, {:alive, node, new_inc})
-        gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, new_inc})
-        state = %{state | membership: membership, gossip_queue: gossip_queue}
+        membership = Membership.set_alive(state.membership, node, current_inc)
+        state = %{state | membership: membership}
         state = cancel_suspicion_timer(node, state)
 
         if prev_status != :alive do
+          # We only gossip if we transitioned from suspect/dead to alive.
+          # Note: alive(N) will be overridden by suspect(N) at other nodes,
+          # which is correct. The node itself must refute with N+1.
+          gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, current_inc})
+          state = %{state | gossip_queue: gossip_queue}
           notify_subscribers({:swim, :node_up, node}, state)
         else
           state

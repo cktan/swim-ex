@@ -23,8 +23,12 @@ defmodule SwimEx.Transport.UDP do
   @impl SwimEx.Transport
   def send(server, {host, port}, data) when is_binary(data) do
     case resolve(host) do
-      {:ok, ip} -> GenServer.call(server, {:send, ip, port, data})
-      {:error, _} = err -> err
+      {:ok, ip} ->
+        GenServer.cast(server, {:send, ip, port, data})
+        :ok
+
+      {:error, _} = err ->
+        err
     end
   end
 
@@ -61,9 +65,9 @@ defmodule SwimEx.Transport.UDP do
   end
 
   @impl GenServer
-  def handle_call({:send, ip, port, data}, _from, state) do
-    result = :gen_udp.send(state.socket, ip, port, data)
-    {:reply, result, state}
+  def handle_cast({:send, ip, port, data}, state) do
+    _ = :gen_udp.send(state.socket, ip, port, data)
+    {:noreply, state}
   end
 
   def handle_call({:set_receiver, pid}, _from, state) do
@@ -104,12 +108,7 @@ defmodule SwimEx.Transport.UDP do
     end
   end
 
-  defp ip_to_string({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"
-
-  defp ip_to_string({a, b, c, d, e, f, g, h}) do
-    [a, b, c, d, e, f, g, h]
-    |> Enum.map(&Integer.to_string(&1, 16))
-    |> Enum.map(&String.downcase/1)
-    |> Enum.join(":")
+  defp ip_to_string(ip) do
+    ip |> :inet.ntoa() |> List.to_string()
   end
 end

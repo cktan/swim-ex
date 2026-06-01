@@ -90,7 +90,7 @@ defmodule SwimEx.GossipQueue do
 
   @spec transmit_limit(non_neg_integer()) :: non_neg_integer()
   def transmit_limit(0), do: 1
-  def transmit_limit(n), do: ceil(:math.log2(n + 1))
+  def transmit_limit(n), do: ceil(:math.log2(n + 1)) * 3
 
   # --- Private ---
 
