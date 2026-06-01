@@ -1,0 +1,658 @@
+defmodule SwimEx.Protocol do
+  @moduledoc """
+  SWIM+INF+Susp protocol state machine.
+
+  Owns all membership state, the gossip queue, pending ping
+  tracking, and suspicion timers. The Transport process owns
+  the socket; this GenServer drives everything else.
+
+  ## Message flow
+
+      Period fires → pick probe target T
+        → send ping(seq) to T
+        → wait ping_timeout
+      ping_timeout fires (no direct ack)
+        → send ping_req(seq, target=T) to k random nodes
+        → wait ping_timeout again (indirect)
+      indirect_timeout fires (no indirect ack)
+        → gossip suspect(T, inc)
+        → start suspicion timer
+      suspicion_timeout fires
+        → gossip dead(T, inc)
+
+  Acks at any stage cancel the relevant timer and update
+  membership. A suspect node can refute by sending
+  alive(self, inc+1).
+  """
+
+  use GenServer
+  require Logger
+
+  alias SwimEx.{Codec, GossipQueue, Membership}
+
+  @default_protocol_period 1000
+  @default_ping_timeout 200
+  @default_ping_req_fanout 3
+  @default_suspicion_timeout 3000
+  @default_seed_retry_interval 5000
+  @default_dead_node_expiry 6000
+
+  defstruct [
+    :self_id,
+    :incarnation,
+    :transport,
+    :transport_mod,
+    :swim_name,
+    :protocol_period,
+    :ping_timeout,
+    :ping_req_fanout,
+    :suspicion_timeout,
+    :seed_retry_interval,
+    :dead_node_expiry,
+    :membership,
+    :gossip_queue,
+    :probe_list,
+    :pending,
+    :suspicion_timers,
+    :seq,
+    :subscribers,
+    :seeds,
+    :ping_times
+  ]
+
+  # --- Public API ---
+
+  def start_link(opts) do
+    name = Keyword.get(opts, :name, :swim)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  def members(name, opts) do
+    GenServer.call(name, {:members, opts})
+  end
+
+  def subscribe(name, pid) do
+    GenServer.call(name, {:subscribe, pid})
+  end
+
+  def unsubscribe(name, pid) do
+    GenServer.call(name, {:unsubscribe, pid})
+  end
+
+  def leave(name) do
+    GenServer.call(name, :leave, 10_000)
+  end
+
+  # --- GenServer callbacks ---
+
+  @impl GenServer
+  def init(opts) do
+    host = Keyword.fetch!(opts, :host)
+    port = Keyword.fetch!(opts, :port)
+    transport = Keyword.fetch!(opts, :transport)
+    transport_mod = Keyword.get(opts, :transport_mod, SwimEx.Transport.UDP)
+
+    incarnation = System.system_time(:millisecond)
+    self_id = {host, port}
+
+    state = %__MODULE__{
+      self_id: self_id,
+      incarnation: incarnation,
+      transport: transport,
+      transport_mod: transport_mod,
+      swim_name: Keyword.get(opts, :name, :swim),
+      protocol_period: Keyword.get(opts, :protocol_period, @default_protocol_period),
+      ping_timeout: Keyword.get(opts, :ping_timeout, @default_ping_timeout),
+      ping_req_fanout: Keyword.get(opts, :ping_req_fanout, @default_ping_req_fanout),
+      suspicion_timeout: Keyword.get(opts, :suspicion_timeout, @default_suspicion_timeout),
+      seed_retry_interval: Keyword.get(opts, :seed_retry_interval, @default_seed_retry_interval),
+      dead_node_expiry: Keyword.get(opts, :dead_node_expiry, @default_dead_node_expiry),
+      membership: Membership.new(),
+      gossip_queue: GossipQueue.new(),
+      probe_list: [],
+      pending: %{},
+      suspicion_timers: %{},
+      seq: 0,
+      subscribers: %{},
+      seeds: Keyword.get(opts, :seeds, []),
+      ping_times: %{}
+    }
+
+    transport_mod.set_receiver(transport, self())
+    schedule_period(state)
+    send(self(), :seed_retry)
+    {:ok, state}
+  end
+
+  @impl GenServer
+  def handle_call({:members, opts}, _from, state) do
+    result = Membership.list(state.membership, opts)
+    {:reply, result, state}
+  end
+
+  def handle_call({:subscribe, pid}, _from, state) do
+    ref = Process.monitor(pid)
+    subscribers = Map.put(state.subscribers, pid, ref)
+    {:reply, :ok, %{state | subscribers: subscribers}}
+  end
+
+  def handle_call({:unsubscribe, pid}, _from, state) do
+    state = remove_subscriber(state, pid)
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:leave, _from, state) do
+    # Use system time so the dead incarnation always exceeds any
+    # locally-bumped incarnation at peers.
+    dead_inc = System.system_time(:millisecond)
+    state = %{state | incarnation: dead_inc}
+    broadcast_dead_self(state)
+    {:stop, :normal, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_info(:protocol_period, state) do
+    state =
+      state
+      |> gc_dead_members()
+      |> run_protocol_period()
+
+    schedule_period(state)
+    {:noreply, state}
+  end
+
+  def handle_info(:seed_retry, state) do
+    state = ping_seeds_if_alone(state)
+    schedule_seed_retry(state)
+    {:noreply, state}
+  end
+
+  def handle_info({:swim_packet, from, data}, state) do
+    state =
+      case Codec.decode(data) do
+        {:ok, msg} ->
+          handle_message(msg, from, state)
+
+        {:error, :invalid} ->
+          :telemetry.execute([:swim, :message, :dropped], %{count: 1}, %{node: state.self_id, peer: from})
+          Logger.warning("invalid packet from peer",
+            swim_node: state.self_id,
+            swim_peer: from,
+            swim_event: :message_dropped
+          )
+          state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:ping_timeout, seq}, state) do
+    state =
+      case Map.get(state.pending, seq) do
+        {target, _ref, :direct} ->
+          send_indirect_pings(seq, target, state)
+
+        _ ->
+          state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:indirect_timeout, seq}, state) do
+    state =
+      case Map.pop(state.pending, seq) do
+        {{target, _ref, :indirect}, pending} ->
+          state = %{state | pending: pending}
+          suspect_node(target, state)
+
+        _ ->
+          state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:suspicion_timeout, node}, state) do
+    state = Map.update!(state, :suspicion_timers, &Map.delete(&1, node))
+
+    state =
+      case Membership.get(state.membership, node) do
+        %{status: :suspect, incarnation: inc} ->
+          dead_node(node, inc, state)
+
+        _ ->
+          state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _}, state) do
+    {:noreply, remove_subscriber(state, pid)}
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
+
+  # --- Protocol period ---
+
+  defp run_protocol_period(state) do
+    n = member_count(state)
+    :telemetry.execute([:swim, :cluster, :size], %{count: n}, %{node: state.self_id})
+
+    {target, state} = next_probe_target(state)
+
+    case target do
+      nil -> state
+      node -> send_ping(node, state)
+    end
+  end
+
+  defp next_probe_target(state) do
+    peers = probe_candidates(state)
+
+    case state.probe_list do
+      [] when peers == [] ->
+        {nil, state}
+
+      [] ->
+        shuffled = Enum.shuffle(peers)
+        [next | rest] = shuffled
+        {next, %{state | probe_list: rest}}
+
+      [next | rest] ->
+        if next in peers do
+          {next, %{state | probe_list: rest}}
+        else
+          # Node left membership; skip and retry
+          next_probe_target(%{state | probe_list: rest})
+        end
+    end
+  end
+
+  defp probe_candidates(state) do
+    state.membership.members
+    |> Enum.filter(fn {_, m} -> m.status in [:alive, :suspect] end)
+    |> Enum.map(fn {node, _} -> node end)
+    |> Enum.reject(&(&1 == state.self_id))
+  end
+
+  # --- Sending messages ---
+
+  defp send_ping(target, state) do
+    seq = state.seq + 1
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    msg = {:ping, state.self_id, seq, events}
+
+    case Codec.encode(msg) do
+      {:ok, data} ->
+        transport_send(state, target, data)
+        ref = Process.send_after(self(), {:ping_timeout, seq}, state.ping_timeout)
+        pending = Map.put(state.pending, seq, {target, ref, :direct})
+        ping_times = Map.put(state.ping_times, seq, System.monotonic_time(:millisecond))
+        %{state | seq: seq, gossip_queue: q, pending: pending, ping_times: ping_times}
+
+      {:error, :too_large} ->
+        Logger.warning("ping too large", swim_node: state.self_id)
+        state
+    end
+  end
+
+  defp send_indirect_pings(seq, target, state) do
+    relays =
+      state.membership.members
+      |> Enum.filter(fn {node, m} ->
+        node != state.self_id and node != target and m.status == :alive
+      end)
+      |> Enum.map(fn {node, _} -> node end)
+      |> Enum.take_random(state.ping_req_fanout)
+
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    msg = {:ping_req, state.self_id, seq, target, events}
+
+    case Codec.encode(msg) do
+      {:ok, data} ->
+        Enum.each(relays, &transport_send(state, &1, data))
+
+      {:error, :too_large} ->
+        Logger.warning("ping_req too large", swim_node: state.self_id)
+    end
+
+    ref = Process.send_after(self(), {:indirect_timeout, seq}, state.ping_timeout)
+    {_old, pending} = Map.pop(state.pending, seq)
+    pending = Map.put(pending, seq, {target, ref, :indirect})
+    %{state | pending: pending, gossip_queue: q}
+  end
+
+  defp send_ack(to, seq, state) do
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    msg = {:ack, state.self_id, seq, events}
+
+    case Codec.encode(msg) do
+      {:ok, data} ->
+        transport_send(state, to, data)
+        %{state | gossip_queue: q}
+
+      {:error, :too_large} ->
+        Logger.warning("ack too large", swim_node: state.self_id)
+        state
+    end
+  end
+
+  defp broadcast_dead_self(state) do
+    event = {:dead, state.self_id, state.incarnation}
+    targets =
+      state.membership.members
+      |> Enum.filter(fn {_, m} -> m.status in [:alive, :suspect] end)
+      |> Enum.map(fn {node, _} -> node end)
+      |> Enum.take_random(state.ping_req_fanout)
+
+    msg = {:ack, state.self_id, 0, [event]}
+
+    case Codec.encode(msg) do
+      {:ok, data} -> Enum.each(targets, &transport_send(state, &1, data))
+      _ -> :ok
+    end
+  end
+
+  # --- Message handlers ---
+
+  defp handle_message({:ping, from, seq, events}, _source, state) do
+    state = apply_gossip_events(events, state)
+    state = update_node_alive(from, state)
+    send_ack(from, seq, state)
+  end
+
+  defp handle_message({:ack, from, seq, events}, _source, state) do
+    state = apply_gossip_events(events, state)
+    # Don't mark sender alive if ack carries their own dead announcement
+    state =
+      if Enum.any?(events, &match?({:dead, ^from, _}, &1)) do
+        state
+      else
+        update_node_alive(from, state)
+      end
+    cancel_pending(seq, state)
+  end
+
+  defp handle_message({:ping_req, from, seq, target, events}, _source, state) do
+    state = apply_gossip_events(events, state)
+    # Forward ping to target, asking it to ack back to us,
+    # then we'll fwd_ack to original sender.
+    # Simplified: just send a regular ping and relay the ack.
+    relay_seq = state.seq + 1
+    relay_msg = {:ping, state.self_id, relay_seq, []}
+
+    state =
+      case Codec.encode(relay_msg) do
+        {:ok, data} ->
+          transport_send(state, target, data)
+          ref = Process.send_after(self(), {:ping_timeout, relay_seq}, state.ping_timeout)
+          pending = Map.put(state.pending, relay_seq, {target, ref, {:relay_to, from, seq}})
+          %{state | seq: relay_seq, pending: pending}
+
+        {:error, :too_large} ->
+          state
+      end
+
+    state
+  end
+
+  defp handle_message({:fwd_ack, from, seq, source, events}, _source_addr, state) do
+    state = apply_gossip_events(events, state)
+    state = update_node_alive(source, state)
+    _ = from
+    cancel_pending(seq, state)
+  end
+
+  defp handle_message(_unknown, _from, state), do: state
+
+  # --- Ack/ping cancellation ---
+
+  defp cancel_pending(seq, state) do
+    case Map.pop(state.pending, seq) do
+      {nil, _} ->
+        state
+
+      {{target, ref, :direct}, pending} ->
+        Process.cancel_timer(ref)
+        emit_rtt(seq, target, state)
+        ping_times = Map.delete(state.ping_times, seq)
+        %{state | pending: pending, ping_times: ping_times}
+
+      {{target, ref, :indirect}, pending} ->
+        Process.cancel_timer(ref)
+        emit_rtt(seq, target, state)
+        ping_times = Map.delete(state.ping_times, seq)
+        %{state | pending: pending, ping_times: ping_times}
+
+      {{_target, ref, {:relay_to, original_sender, orig_seq}}, pending} ->
+        Process.cancel_timer(ref)
+        # Forward ack back to original ping-req sender
+        fwd_msg = {:fwd_ack, state.self_id, orig_seq, state.self_id, []}
+
+        case Codec.encode(fwd_msg) do
+          {:ok, data} -> transport_send(state, original_sender, data)
+          _ -> :ok
+        end
+
+        %{state | pending: pending}
+    end
+  end
+
+  # --- Membership updates ---
+
+  defp update_node_alive(node, state) when node == state.self_id, do: state
+
+  defp update_node_alive(node, state) do
+    case Membership.get(state.membership, node) do
+      nil ->
+        inc = System.system_time(:millisecond)
+        membership = Membership.add(state.membership, node, inc)
+        gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, inc})
+        state = %{state | membership: membership, gossip_queue: gossip_queue}
+        notify_subscribers({:swim, :node_up, node}, state)
+
+      %{status: prev_status, incarnation: current_inc} ->
+        new_inc = current_inc + 1
+        membership = Membership.apply_event(state.membership, {:alive, node, new_inc})
+        gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, new_inc})
+        state = %{state | membership: membership, gossip_queue: gossip_queue}
+        state = cancel_suspicion_timer(node, state)
+
+        if prev_status != :alive do
+          notify_subscribers({:swim, :node_up, node}, state)
+        else
+          state
+        end
+    end
+  end
+
+  defp suspect_node(node, state) do
+    case Membership.get(state.membership, node) do
+      nil -> state
+      %{status: :dead} -> state
+      %{incarnation: inc} ->
+        membership = Membership.apply_event(state.membership, {:suspect, node, inc})
+        state = %{state | membership: membership}
+        gossip_event = {:suspect, node, inc}
+        queue = GossipQueue.enqueue(state.gossip_queue, gossip_event)
+        state = %{state | gossip_queue: queue}
+        notify_subscribers({:swim, :node_suspect, node}, state)
+        start_suspicion_timer(node, state)
+    end
+  end
+
+  defp dead_node(node, inc, state) do
+    membership = Membership.apply_event(state.membership, {:dead, node, inc})
+
+    case Membership.get(membership, node) do
+      %{status: :dead} ->
+        state = %{state | membership: membership}
+        queue = GossipQueue.enqueue(state.gossip_queue, {:dead, node, inc})
+        state = %{state | gossip_queue: queue}
+        notify_subscribers({:swim, :node_down, node}, state)
+        state
+
+      _ ->
+        state
+    end
+  end
+
+  # --- Suspicion timers ---
+
+  defp start_suspicion_timer(node, state) do
+    if Map.has_key?(state.suspicion_timers, node) do
+      state
+    else
+      ref = Process.send_after(self(), {:suspicion_timeout, node}, state.suspicion_timeout)
+      %{state | suspicion_timers: Map.put(state.suspicion_timers, node, ref)}
+    end
+  end
+
+  defp cancel_suspicion_timer(node, state) do
+    case Map.pop(state.suspicion_timers, node) do
+      {nil, _} -> state
+      {ref, timers} ->
+        Process.cancel_timer(ref)
+        %{state | suspicion_timers: timers}
+    end
+  end
+
+  # --- Gossip event application ---
+
+  defp apply_gossip_events(events, state) do
+    Enum.reduce(events, state, &apply_single_event(&2, &1))
+  end
+
+  defp apply_single_event(state, {kind, node, _inc} = event) when node != state.self_id do
+    prev = Membership.get(state.membership, node)
+    membership = Membership.apply_event(state.membership, event)
+    curr = Membership.get(membership, node)
+    state = %{state | membership: membership}
+
+    state =
+      if prev != curr do
+        queue = GossipQueue.enqueue(state.gossip_queue, event)
+        state = %{state | gossip_queue: queue}
+
+        cond do
+          kind == :dead ->
+            state = cancel_suspicion_timer(node, state)
+            notify_subscribers({:swim, :node_down, node}, state)
+
+          kind == :suspect ->
+            state = start_suspicion_timer(node, state)
+            notify_subscribers({:swim, :node_suspect, node}, state)
+
+          kind == :alive and (prev == nil or match?(%{status: s} when s != :alive, prev)) ->
+            state = cancel_suspicion_timer(node, state)
+            notify_subscribers({:swim, :node_up, node}, state)
+
+          true ->
+            state
+        end
+      else
+        state
+      end
+
+    state
+  end
+
+  defp apply_single_event(state, {kind, node, inc}) when node == state.self_id do
+    # Self-refutation: if we receive suspect about ourselves, bump incarnation
+    if kind == :suspect and inc >= state.incarnation do
+      new_inc = inc + 1
+      state = %{state | incarnation: new_inc}
+      event = {:alive, state.self_id, new_inc}
+      queue = GossipQueue.enqueue(state.gossip_queue, event)
+      %{state | gossip_queue: queue}
+    else
+      state
+    end
+  end
+
+  # --- Seeds ---
+
+  defp ping_seeds_if_alone(state) do
+    if Membership.member_count(state.membership) == 0 and state.seeds != [] do
+      Enum.reduce(state.seeds, state, fn seed, acc ->
+        send_ping(seed, acc)
+      end)
+    else
+      state
+    end
+  end
+
+  # --- Subscribers ---
+
+  defp notify_subscribers({:swim, event, node} = msg, state) do
+    {telemetry_event, log_level} =
+      case event do
+        :node_up -> {[:swim, :node, :up], :info}
+        :node_down -> {[:swim, :node, :down], :warning}
+        :node_suspect -> {[:swim, :node, :suspect], :warning}
+      end
+
+    :telemetry.execute(telemetry_event, %{}, %{node: state.self_id, peer: node})
+
+    Logger.log(log_level, "membership change: #{event}",
+      swim_node: state.self_id,
+      swim_peer: node,
+      swim_event: event
+    )
+
+    Enum.each(state.subscribers, fn {pid, _ref} ->
+      Kernel.send(pid, msg)
+    end)
+
+    state
+  end
+
+  defp remove_subscriber(state, pid) do
+    case Map.pop(state.subscribers, pid) do
+      {nil, _} ->
+        state
+
+      {ref, subscribers} ->
+        Process.demonitor(ref, [:flush])
+        %{state | subscribers: subscribers}
+    end
+  end
+
+  # --- GC ---
+
+  defp gc_dead_members(state) do
+    membership = Membership.gc(state.membership, state.dead_node_expiry)
+    %{state | membership: membership}
+  end
+
+  # --- Helpers ---
+
+  defp transport_send(state, to, data) do
+    state.transport_mod.send(state.transport, to, data)
+  end
+
+  defp member_count(state) do
+    Membership.member_count(state.membership)
+  end
+
+  defp schedule_period(state) do
+    Process.send_after(self(), :protocol_period, state.protocol_period)
+  end
+
+  defp schedule_seed_retry(state) do
+    Process.send_after(self(), :seed_retry, state.seed_retry_interval)
+  end
+
+  defp emit_rtt(seq, target, state) do
+    case Map.get(state.ping_times, seq) do
+      nil ->
+        :ok
+
+      sent_at ->
+        duration = System.monotonic_time(:millisecond) - sent_at
+        :telemetry.execute([:swim, :ping, :rtt], %{duration: duration}, %{node: state.self_id, peer: target})
+    end
+  end
+end
