@@ -175,7 +175,7 @@ defmodule SwimEx.ProtocolTest do
     n2_id = {"n2", 8001, ""}
 
     # n1: bare transport so test process receives swim_packets directly
-    n1_transport = :"transport_n1_8001"
+    n1_transport = :transport_n1_8001
     {:ok, _} = InMemory.start_link(network: net, identity: n1_id, name: n1_transport)
     InMemory.set_receiver(n1_transport, self())
 

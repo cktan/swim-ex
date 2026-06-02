@@ -73,10 +73,12 @@ defmodule SwimEx.Transport.UDP do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call({:set_receiver, pid}, _from, state) do
     {:reply, :ok, %{state | receiver: pid}}
   end
 
+  @impl GenServer
   def handle_call(:close, _from, state) do
     :gen_udp.close(state.socket)
     {:reply, :ok, %{state | socket: nil}}
@@ -92,6 +94,7 @@ defmodule SwimEx.Transport.UDP do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info(_msg, state), do: {:noreply, state}
 
   # --- Helpers ---

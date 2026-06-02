@@ -135,7 +135,7 @@ defmodule SwimEx.IntegrationTest do
     {t2, _n2} = node_opts(net, "d2", 4001, seeds: [{"d1", 4001}])
     {_t3, n3} = node_opts(net, "d3", 4001, seeds: [{"d1", 4001}])
 
-    names = [n1, :"n_d2_4001", n3]
+    names = [n1, :n_d2_4001, n3]
     :ok = wait_for(@t * 20, fn -> all_know_each_other(names) end)
 
     SwimEx.Protocol.subscribe(n1, self())
