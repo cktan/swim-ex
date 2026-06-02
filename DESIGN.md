@@ -144,8 +144,9 @@ opts. Defaults are tuned for an 8-node cluster.
 - **Transmit multiplier:** `ceil(log₂(N+1)) × 3` where
   `N` = count of alive + suspect nodes. Recalculated
   dynamically as membership changes.
-- **Piggyback budget:** fill up to MTU (1400 bytes)
-  per outgoing message.
+- **Piggyback budget:** fill outgoing messages up to the 1400-byte
+  MTU. To ensure headers fit, the gossip payload is capped
+  to MTU minus a safety margin (128 bytes).
 - **Event types:** `:alive`, `:suspect`, `:dead`.
   No user-defined event type.
 - **Priority ordering:** dead → suspect → alive.
@@ -321,7 +322,8 @@ unlucky streaks possible with pure random selection.
 ## 14. Testing Strategy
 
 - **Unit tests:** encode/decode roundtrip, state
-  machine transitions, gossip queue ordering.
+  machine transitions, gossip queue ordering, and
+  gossip piggybacking in relay packets.
 - **Integration tests:** multiple SWIM instances
   in the same BEAM on different ports.
 - **Simulated network:** `SWIM.Transport.InMemory`

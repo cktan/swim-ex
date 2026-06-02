@@ -37,6 +37,8 @@ defmodule SwimEx.Protocol do
   @default_seed_retry_interval 5000
   @default_dead_node_expiry 6000
 
+  @mtu_margin 128
+
   defstruct [
     :self_id,
     :cookie,
@@ -284,7 +286,7 @@ defmodule SwimEx.Protocol do
 
   defp send_ping(target, state) do
     seq = state.seq + 1
-    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu() - @mtu_margin)
     msg = {:ping, state.self_id, seq, events}
 
     case Codec.encode(msg) do
@@ -310,7 +312,7 @@ defmodule SwimEx.Protocol do
       |> Enum.map(fn {node, _} -> node end)
       |> Enum.take_random(state.ping_req_fanout)
 
-    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu() - @mtu_margin)
     msg = {:ping_req, state.self_id, seq, target, events}
 
     case Codec.encode(msg) do
@@ -328,7 +330,7 @@ defmodule SwimEx.Protocol do
   end
 
   defp send_ack(to, seq, state) do
-    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu())
+    {events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu() - @mtu_margin)
     msg = {:ack, state.self_id, seq, events}
 
     case Codec.encode(msg) do
@@ -386,7 +388,8 @@ defmodule SwimEx.Protocol do
     # then we'll fwd_ack to original sender.
     # Simplified: just send a regular ping and relay the ack.
     relay_seq = state.seq + 1
-    relay_msg = {:ping, state.self_id, relay_seq, []}
+    {relay_events, q} = GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu() - @mtu_margin)
+    relay_msg = {:ping, state.self_id, relay_seq, relay_events}
 
     state =
       case Codec.encode(relay_msg) do
@@ -394,7 +397,7 @@ defmodule SwimEx.Protocol do
           transport_send(state, target, data)
           ref = Process.send_after(self(), {:ping_timeout, relay_seq}, state.ping_timeout)
           pending = Map.put(state.pending, relay_seq, {target, ref, {:relay_to, from, seq}})
-          %{state | seq: relay_seq, pending: pending}
+          %{state | seq: relay_seq, pending: pending, gossip_queue: q}
 
         {:error, :too_large} ->
           state
@@ -436,12 +439,20 @@ defmodule SwimEx.Protocol do
       {{target, ref, {:relay_to, original_sender, orig_seq}}, pending} ->
         Process.cancel_timer(ref)
         # Forward ack back to original ping-req sender
-        fwd_msg = {:fwd_ack, state.self_id, orig_seq, target, []}
+        {fwd_events, q} =
+          GossipQueue.pack(state.gossip_queue, member_count(state), Codec.mtu() - @mtu_margin)
 
-        case Codec.encode(fwd_msg) do
-          {:ok, data} -> transport_send(state, original_sender, data)
-          _ -> :ok
-        end
+        fwd_msg = {:fwd_ack, state.self_id, orig_seq, target, fwd_events}
+
+        state =
+          case Codec.encode(fwd_msg) do
+            {:ok, data} ->
+              transport_send(state, original_sender, data)
+              %{state | gossip_queue: q}
+
+            _ ->
+              state
+          end
 
         %{state | pending: pending}
     end
