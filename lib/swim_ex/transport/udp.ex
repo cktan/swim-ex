@@ -105,6 +105,10 @@ defmodule SwimEx.Transport.UDP do
     charlist = String.to_charlist(host)
 
     case :inet.parse_address(charlist) do
+      {:ok, {a, b, c, d}} ->
+        # Convert IPv4 to IPv4-mapped IPv6 for the inet6 socket.
+        {:ok, {0, 0, 0, 0, 0, 0xFFFF, a * 256 + b, c * 256 + d}}
+
       {:ok, ip} ->
         {:ok, ip}
 
@@ -114,6 +118,10 @@ defmodule SwimEx.Transport.UDP do
           {:error, _} -> :inet.getaddr(charlist, :inet)
         end
     end
+  end
+
+  defp ip_to_string({0, 0, 0, 0, 0, 0xFFFF, ab, cd}) do
+    "#{div(ab, 256)}.#{rem(ab, 256)}.#{div(cd, 256)}.#{rem(cd, 256)}"
   end
 
   defp ip_to_string(ip) do
