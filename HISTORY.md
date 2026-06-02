@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 6 :: next_probe_target: replace tail-recursion skip with Enum.reject for fairness
+**Decision:** fixed — 2026-06-02
+
+**Problem:** next_probe_target/1 skips dead/removed nodes via tail recursion. In steady state this is fine, but under heavy churn it can skip many entries before finding a live node, and the shuffle that follows always uses the full peer list rather than filtering first, meaning probe_list may diverge from membership more than necessary.
+
+**Solution:** Replaced tail-recursive skip loop with upfront Enum.reject using a MapSet of current peers, keeping probe_list consistent with membership in O(n). Merged in commit b5cd708.
+
+---
+
+
 ## ISSUE 10 :: start_suspicion_timer does not refresh timer when incarnation advances while a timer is pending
 **Decision:** fixed — 2026-06-02
 

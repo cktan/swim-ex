@@ -132,6 +132,11 @@ The calling process receives messages:
 Dead subscriber processes are removed automatically via
 `Process.monitor/1`.
 
+> **Restart caveat:** if the `Protocol` process crashes and is
+> restarted by its supervisor, the subscription list is lost.
+> Subscribers should monitor the `Protocol` process and
+> re-subscribe if it restarts to continue receiving events.
+
 ### Graceful leave
 
 ```elixir

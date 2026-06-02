@@ -176,6 +176,10 @@ alive ──────────────────► suspect
   (no separate `:left` state)
 - **Incarnation numbers:** always included.
   Seeded at startup with `System.system_time(:millisecond)`.
+- **Dead → alive transition:** only via gossip with
+  `inc > dead_inc`. Direct pings or acks from a dead
+  node do not revive it; the node must restart with a
+  higher incarnation and let that propagate via gossip.
 
 > **Caveat:** if the system clock steps backward
 > (NTP correction) between a node's death and its
@@ -197,6 +201,11 @@ alive ──────────────────► suspect
 ## 10. Bootstrap / Join
 
 - **Discovery:** caller provides a seed node list.
+- **Self-announcement:** on startup the node enqueues
+  `{:alive, self_id, incarnation}` into its gossip
+  queue (with `refutation_multiplier` transmit slots)
+  so peers learn the node's real incarnation from the
+  first probes it sends.
 - **Seed unreachable:** start as a single-node
   cluster and retry seeds every `seed_retry_interval`
   (default 5000 ms, fixed interval).

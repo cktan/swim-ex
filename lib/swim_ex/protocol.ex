@@ -97,8 +97,11 @@ defmodule SwimEx.Protocol do
     transport = Keyword.fetch!(opts, :transport)
     transport_mod = Keyword.get(opts, :transport_mod, SwimEx.Transport.UDP)
 
-    incarnation = System.system_time(:millisecond)
+    incarnation = Keyword.get(opts, :incarnation, System.system_time(:millisecond))
     self_id = {host, port, cookie}
+
+    gossip_queue = GossipQueue.new()
+    gossip_queue = GossipQueue.enqueue(gossip_queue, {:alive, self_id, incarnation}, @refutation_multiplier)
 
     state = %__MODULE__{
       self_id: self_id,
@@ -114,7 +117,7 @@ defmodule SwimEx.Protocol do
       seed_retry_interval: Keyword.get(opts, :seed_retry_interval, @default_seed_retry_interval),
       dead_node_expiry: Keyword.get(opts, :dead_node_expiry, @default_dead_node_expiry),
       membership: Membership.new(),
-      gossip_queue: GossipQueue.new(),
+      gossip_queue: gossip_queue,
       probe_list: [],
       pending: %{},
       suspicion_timers: %{},
@@ -468,11 +471,14 @@ defmodule SwimEx.Protocol do
   defp update_node_alive(node, state) do
     case Membership.get(state.membership, node) do
       nil ->
-        inc = System.system_time(:millisecond)
+        inc = 0
         membership = Membership.add(state.membership, node, inc)
         gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, inc})
         state = %{state | membership: membership, gossip_queue: gossip_queue}
         notify_subscribers({:swim, :node_up, node}, state)
+
+      %{status: :dead} ->
+        state
 
       %{status: prev_status, incarnation: current_inc} ->
         membership = Membership.set_alive(state.membership, node, current_inc)
@@ -480,9 +486,9 @@ defmodule SwimEx.Protocol do
         state = cancel_suspicion_timer(node, state)
 
         if prev_status != :alive do
-          # We only gossip if we transitioned from suspect/dead to alive.
-          # Note: alive(N) will be overridden by suspect(N) at other nodes,
-          # which is correct. The node itself must refute with N+1.
+          # We only gossip if we transitioned from suspect to alive.
+          # Note: we no longer revive dead nodes here; we wait for
+          # higher-incarnation gossip from the node itself.
           gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, current_inc}, @refutation_multiplier)
           state = %{state | gossip_queue: gossip_queue}
           notify_subscribers({:swim, :node_up, node}, state)
@@ -701,3 +707,4 @@ defmodule SwimEx.Protocol do
     end)
   end
 end
+
