@@ -23,8 +23,11 @@ defmodule SwimEx.GossipQueue do
           multiplier: pos_integer()
         }
 
-  @type t :: %__MODULE__{entries: [entry()]}
-  defstruct entries: []
+  @type t :: %__MODULE__{
+          by_node: %{node_id() => entry()},
+          sorted_keys: term()
+        }
+  defstruct by_node: %{}, sorted_keys: :gb_sets.new()
 
   @spec new() :: t()
   def new, do: %__MODULE__{}
@@ -35,28 +38,49 @@ defmodule SwimEx.GossipQueue do
     node = node_of(event)
     inc = inc_of(event)
 
-    entries =
-      case find_existing(q.entries, node) do
-        nil ->
-          [make_entry(event, p, multiplier) | q.entries]
+    case Map.get(q.by_node, node) do
+      nil ->
+        entry = make_entry(event, p, multiplier)
 
-        existing ->
-          existing_inc = inc_of(existing.event)
+        %{
+          q
+          | by_node: Map.put(q.by_node, node, entry),
+            sorted_keys: :gb_sets.add_element({p, 0, node}, q.sorted_keys)
+        }
 
-          cond do
-            inc > existing_inc ->
-              [make_entry(event, p, multiplier) | reject_node(q.entries, node)]
+      existing ->
+        existing_inc = inc_of(existing.event)
 
-            inc == existing_inc and p < existing.priority ->
-              effective = max(multiplier, existing.multiplier)
-              [make_entry(event, p, effective) | reject_node(q.entries, node)]
+        cond do
+          inc > existing_inc ->
+            entry = make_entry(event, p, multiplier)
 
-            true ->
-              q.entries
-          end
-      end
+            %{
+              q
+              | by_node: Map.put(q.by_node, node, entry),
+                sorted_keys:
+                  q.sorted_keys
+                  |> then(&:gb_sets.delete_any({existing.priority, existing.transmit_count, node}, &1))
+                  |> then(&:gb_sets.add_element({p, 0, node}, &1))
+            }
 
-    %{q | entries: entries}
+          inc == existing_inc and p < existing.priority ->
+            effective = max(multiplier, existing.multiplier)
+            entry = make_entry(event, p, effective)
+
+            %{
+              q
+              | by_node: Map.put(q.by_node, node, entry),
+                sorted_keys:
+                  q.sorted_keys
+                  |> then(&:gb_sets.delete_any({existing.priority, existing.transmit_count, node}, &1))
+                  |> then(&:gb_sets.add_element({p, 0, node}, &1))
+            }
+
+          true ->
+            q
+        end
+    end
   end
 
   @doc """
@@ -69,26 +93,70 @@ defmodule SwimEx.GossipQueue do
   @spec pack(t(), non_neg_integer(), non_neg_integer()) :: {[event()], t()}
   def pack(%__MODULE__{} = q, n, mtu) do
     limit = transmit_limit(n)
-    sorted = sort(q.entries)
-    {packed_entries, _rest} = pack_entries(sorted, mtu, [])
-    packed_set = MapSet.new(packed_entries)
 
-    new_entries =
-      Enum.flat_map(sorted, fn entry ->
-        if MapSet.member?(packed_set, entry) do
-          new_count = entry.transmit_count + 1
-          if new_count >= limit * entry.multiplier, do: [], else: [%{entry | transmit_count: new_count}]
-        else
-          [entry]
-        end
+    {packed_entries, remaining_keys, remaining_by_node} =
+      do_collect_pack(q.sorted_keys, q.by_node, mtu, [], 2, 0)
+
+    {final_keys, final_by_node} =
+      Enum.reduce(packed_entries, {remaining_keys, remaining_by_node}, fn entry, {keys_acc, nodes_acc} ->
+        requeue_after_pack(entry, limit, keys_acc, nodes_acc)
       end)
 
-    packed_events = packed_entries |> Enum.reverse() |> Enum.map(& &1.event)
-    {packed_events, %{q | entries: new_entries}}
+    packed_events = Enum.map(packed_entries, & &1.event)
+    {packed_events, %{q | sorted_keys: final_keys, by_node: final_by_node}}
+  end
+
+  defp do_collect_pack(keys, by_node, mtu, packed, current_size, n) do
+    case :gb_sets.is_empty(keys) do
+      true ->
+        {Enum.reverse(packed), keys, by_node}
+
+      false ->
+        {key, remaining_keys} = :gb_sets.take_smallest(keys)
+        {_p, _tc, node} = key
+        entry = Map.fetch!(by_node, node)
+
+        esize = byte_size(:erlang.term_to_binary(entry.event))
+        new_size = if n == 0, do: current_size + 4 + esize, else: current_size + esize - 1
+
+        if new_size <= mtu do
+          do_collect_pack(remaining_keys, Map.delete(by_node, node), mtu, [entry | packed], new_size, n + 1)
+        else
+          {Enum.reverse(packed), keys, by_node}
+        end
+    end
+  end
+
+  defp requeue_after_pack(entry, limit, keys, by_node) do
+    new_count = entry.transmit_count + 1
+
+    if new_count >= limit * entry.multiplier do
+      {keys, by_node}
+    else
+      new_entry = %{entry | transmit_count: new_count}
+      node = node_of(entry.event)
+      p = entry.priority
+
+      {
+        :gb_sets.add_element({p, new_count, node}, keys),
+        Map.put(by_node, node, new_entry)
+      }
+    end
   end
 
   @spec size(t()) :: non_neg_integer()
-  def size(%__MODULE__{} = q), do: length(q.entries)
+  def size(%__MODULE__{} = q), do: map_size(q.by_node)
+
+  @doc """
+  Returns all entries in the queue in priority order.
+  Used primarily for testing and debugging.
+  """
+  @spec entries(t()) :: [entry()]
+  def entries(%__MODULE__{} = q) do
+    q.sorted_keys
+    |> :gb_sets.to_list()
+    |> Enum.map(fn {_, _, node} -> Map.fetch!(q.by_node, node) end)
+  end
 
   @spec transmit_limit(non_neg_integer()) :: non_neg_integer()
   def transmit_limit(0), do: 1
@@ -105,47 +173,5 @@ defmodule SwimEx.GossipQueue do
 
   defp make_entry(event, priority, multiplier) do
     %{event: event, priority: priority, transmit_count: 0, multiplier: multiplier}
-  end
-
-  defp find_existing(entries, node) do
-    Enum.find(entries, fn e -> node_of(e.event) == node end)
-  end
-
-  defp reject_node(entries, node) do
-    Enum.reject(entries, fn e -> node_of(e.event) == node end)
-  end
-
-  defp sort(entries) do
-    Enum.sort_by(entries, fn e -> {e.priority, e.transmit_count} end)
-  end
-
-  # Greedily pack entries until adding the next would exceed mtu.
-  # Tracks encoded list size incrementally (O(N)) instead of re-encoding
-  # the full candidate list on every step.
-  #
-  # ETF list size formula:
-  #   empty list  = 2 bytes (version + NIL tag)
-  #   first elem  = base + 4 + elem_standalone_size
-  #   nth elem    = current + elem_standalone_size - 1
-  defp pack_entries(entries, mtu, packed) do
-    n = length(packed)
-    initial_size =
-      if n == 0,
-        do: 2,
-        else: byte_size(:erlang.term_to_binary(Enum.map(packed, & &1.event)))
-    do_pack(entries, mtu, packed, initial_size, n)
-  end
-
-  defp do_pack([], _mtu, packed, _size, _n), do: {packed, []}
-
-  defp do_pack([entry | rest], mtu, packed, current_size, n) do
-    esize = byte_size(:erlang.term_to_binary(entry.event))
-    new_size = if n == 0, do: current_size + 4 + esize, else: current_size + esize - 1
-
-    if new_size <= mtu do
-      do_pack(rest, mtu, [entry | packed], new_size, n + 1)
-    else
-      {packed, [entry | rest]}
-    end
   end
 end

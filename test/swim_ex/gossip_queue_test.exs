@@ -113,6 +113,20 @@ defmodule SwimEx.GossipQueueTest do
     assert [{:alive, @node_a, 1}] = events2
   end
 
+  test "enqueue supersedes entry that has been partially transmitted" do
+    q = GossipQueue.new() |> GossipQueue.enqueue({:alive, @node_a, 5})
+    {_, q} = GossipQueue.pack(q, 10, @big_mtu)
+
+    # After one pack, transmit_count = 1; sorted_keys holds {2, 1, @node_a}.
+    # Superseding with a higher incarnation must delete that key (not {2, 0, @node_a}).
+    q = GossipQueue.enqueue(q, {:alive, @node_a, 6})
+    assert GossipQueue.size(q) == 1
+
+    # Must be packable — a stale key in sorted_keys would cause Map.fetch! to crash.
+    {events, _q} = GossipQueue.pack(q, 10, @big_mtu)
+    assert events == [{:alive, @node_a, 6}]
+  end
+
   test "event dropped from queue after transmit limit reached" do
     n = 1
     limit = GossipQueue.transmit_limit(n)
@@ -175,7 +189,7 @@ defmodule SwimEx.GossipQueueTest do
     # suspect priority=1 < alive priority=2, same incarnation → supersedes
     q = GossipQueue.enqueue(q, {:suspect, @node_a, 5})
 
-    [entry] = q.entries
+    [entry] = GossipQueue.entries(q)
     assert entry.event == {:suspect, @node_a, 5}
     assert entry.multiplier == 2
   end
@@ -239,7 +253,7 @@ defmodule SwimEx.GossipQueueTest do
     check all events <- list_of(event(), min_length: 1, max_length: 30) do
       q = Enum.reduce(events, GossipQueue.new(), &GossipQueue.enqueue(&2, &1))
 
-      nodes = Enum.map(q.entries, fn e -> elem(e.event, 1) end)
+      nodes = Enum.map(GossipQueue.entries(q), fn e -> elem(e.event, 1) end)
       assert length(nodes) == length(Enum.uniq(nodes))
     end
   end

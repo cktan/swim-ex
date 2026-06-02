@@ -272,7 +272,7 @@ defmodule SwimEx.ProtocolTest do
     :sys.get_state(pid)
 
     state = :sys.get_state(pid)
-    entry = Enum.find(state.gossip_queue.entries, fn e -> elem(e.event, 1) == ghost end)
+    entry = Enum.find(SwimEx.GossipQueue.entries(state.gossip_queue), fn e -> elem(e.event, 1) == ghost end)
 
     assert entry != nil, "alive event for unknown node should be queued"
     assert entry.multiplier == 2, "expected refutation multiplier, got #{inspect(entry)}"
