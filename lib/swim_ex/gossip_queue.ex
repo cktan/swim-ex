@@ -33,7 +33,7 @@ defmodule SwimEx.GossipQueue do
   def new, do: %__MODULE__{}
 
   @spec enqueue(t(), event(), pos_integer()) :: t()
-  def enqueue(%__MODULE__{} = q, event, multiplier \\ 1) do
+  def enqueue(%__MODULE__{} = q, event, multiplier \\ 1) when multiplier > 0 do
     p = priority(event)
     node = node_of(event)
     inc = inc_of(event)
