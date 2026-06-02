@@ -150,7 +150,7 @@ For an ungraceful stop (no dead broadcast), call
 
 ## Multiple instances
 
-Run two independent SWIM clusters in one BEAM by giving
+Run two independent SwimEx clusters in one BEAM by giving
 each a distinct `:name`:
 
 ```elixir
@@ -311,7 +311,7 @@ test "two nodes converge", %{net: net} do
                 seeds: [{"n1", 7771}])
 
   Process.sleep(300)
-  assert [{"n2", 7771, :alive}] = SwimEx.Protocol.members(:n1, [])
+  assert [{"n2", 7771, "", :alive, _}] = SwimEx.Protocol.members(:n1, [])
 end
 ```
 

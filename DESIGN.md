@@ -66,11 +66,11 @@ The cookie is optionally specified by the user during node startup or when defin
 
 - **Protocol:** UDP only
 - **IP versions:** IPv4 + IPv6
-- **Port:** 7771 (default, configurable)
+- **Port:** UDP port (required, configurable)
 - **MTU:** 1400 bytes (conservative, safe everywhere)
 - **Overflow behaviour:** return error — caller
   re-encodes with fewer piggyback events
-- **Internal abstraction:** `SWIM.Transport` behaviour
+- **Internal abstraction:** `SwimEx.Transport` behaviour
   with a UDP implementation shipped. An `InMemory`
   implementation lives in `test/support/` only and is
   not part of the public API. This boundary allows
@@ -212,7 +212,7 @@ alive ──────────────────► suspect
 
 ```elixir
 # Add to your supervision tree:
-{SWIM.Supervisor, [
+{SwimEx.Supervisor, [
   host: "10.0.0.1",          # required
   port: 7771,                 # required
   name: :my_cluster,          # optional, default :swim
@@ -232,16 +232,16 @@ All functions accept an optional `name` argument
 ### Querying membership
 
 ```elixir
-SWIM.members(name \\ :swim, opts \\ [])
-# opts: [include_dead: true]  ← default true
-# returns: [{"host", port, "cookie", :alive | :suspect | :dead}]
+SwimEx.members(name \\ :swim, opts \\ [])
+# opts: [include_dead: true]  ← default false
+# returns: [{"host", port, "cookie", status, incarnation}]
 ```
 
 ### Event subscription
 
 ```elixir
-SWIM.subscribe(name \\ :swim)    # registers self()
-SWIM.unsubscribe(name \\ :swim)  # deregisters self()
+SwimEx.subscribe(name \\ :swim)    # registers self()
+SwimEx.unsubscribe(name \\ :swim)  # deregisters self()
 ```
 
 Messages delivered to the subscriber process:
@@ -259,7 +259,7 @@ on `:DOWN`.
 ### Graceful leave
 
 ```elixir
-SWIM.leave(name \\ :swim)
+SwimEx.leave(name \\ :swim)
 ```
 
 1. Increments own incarnation number.
@@ -281,9 +281,9 @@ For a silent stop (no dead broadcast), call
 **Membership transitions:**
 
 ```elixir
-[:swim, :node, :up]      # %{node: {"host", port, "cookie"}}
-[:swim, :node, :down]    # %{node: {"host", port, "cookie"}}
-[:swim, :node, :suspect] # %{node: {"host", port, "cookie"}}
+[:swim, :node, :up]      # %{node: self_id, peer: affected_node_id}
+[:swim, :node, :down]    # %{node: self_id, peer: affected_node_id}
+[:swim, :node, :suspect] # %{node: self_id, peer: affected_node_id}
 ```
 
 **Metrics:**
@@ -324,9 +324,9 @@ unlucky streaks possible with pure random selection.
 - **Unit tests:** encode/decode roundtrip, state
   machine transitions, gossip queue ordering, and
   gossip piggybacking in relay packets.
-- **Integration tests:** multiple SWIM instances
+- **Integration tests:** multiple SwimEx instances
   in the same BEAM on different ports.
-- **Simulated network:** `SWIM.Transport.InMemory`
+- **Simulated network:** `SwimEx.Transport.InMemory`
   (test-only) supports injecting packet loss, delay,
   and reorder for protocol correctness tests.
 - **Property tests (StreamData):**

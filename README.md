@@ -18,7 +18,7 @@ SwimEx.subscribe()
 # receives {:swim, :node_up, {"10.0.0.2", 7771, "c1"}} etc.
 
 SwimEx.members()
-#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.3", 7771, "c1", :suspect}]
+#=> [{"10.0.0.2", 7771, "c1", :alive, 3}, {"10.0.0.3", 7771, "c1", :suspect, 1}]
 ```
 
 
