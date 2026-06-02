@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 7 :: Add edge-case tests: MTU boundary, clock skew, rapid join/leave, packet reorder
+**Decision:** fixed — 2026-06-02
+
+**Problem:** The test suite lacks coverage for four scenarios: (1) gossip pack where exactly one more event would exceed MTU; (2) integration test with simulated NTP clock rollback on one node; (3) a node joining and leaving within a single protocol_period; (4) a suspect event arriving after an alive event for the same incarnation (Membership should drop it, but this is unverified).
+
+**Solution:** Fixed: edge-case tests added (MTU boundary, clock-skew lower-inc rejection, rapid join/leave, packet reorder) plus protocol robustness fixes (startup self-alive gossip, dead-node revival guard). Merged in commit 67ab39f.
+
+---
+
+
 ## ISSUE 6 :: next_probe_target: replace tail-recursion skip with Enum.reject for fairness
 **Decision:** fixed — 2026-06-02
 
