@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 12 :: Refutation-multiplier rule duplicated across three Protocol call sites
+**Decision:** fixed — 2026-06-02
+
+**Problem:** The decision to use @refutation_multiplier for alive gossip is independently reimplemented in three separate functions: update_node_alive/2 (~line 480), apply_single_event/2 non-self path (~line 559), and apply_single_event/2 self-refutation path (~line 596). Each carries its own inline condition. A future alive-enqueue call site added without consulting all three will silently use multiplier=1, reproducing the original zombie-revival bug.
+
+**Solution:** Extracted enqueue_gossip/3 helper in protocol.ex centralizing the refutation-multiplier decision. No behavioral change. Merged in commit 6c0b6e8.
+
+---
+
+
 ## ISSUE 11 :: transmit_limit(0) special case violated by multiplier>1
 **Decision:** ignored — 2026-06-02
 
