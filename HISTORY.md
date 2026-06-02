@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 8 :: GossipQueue.pack/2 called on every message; profile for large clusters
+**Decision:** fixed — 2026-06-02
+
+**Problem:** pack_entries/5 iterates the gossip queue linearly on every outbound ping, ping_req, and ack. In large clusters with high event throughput the repeated linear scan plus sort adds constant overhead that grows with queue depth. No profiling data exists to quantify the impact.
+
+**Solution:** Refactored GossipQueue from flat list to {by_node: map, sorted_keys: :gb_sets} dual structure. enqueue is O(log N), pack is O(k log N), size is O(1). Added entries/1 for testing. Added test covering enqueue-after-pack supersede path. Merged in commit bc3c3d2.
+
+---
+
+
 ## ISSUE 7 :: Add edge-case tests: MTU boundary, clock skew, rapid join/leave, packet reorder
 **Decision:** fixed — 2026-06-02
 
