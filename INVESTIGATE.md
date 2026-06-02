@@ -4,7 +4,7 @@ Findings verified against source on 2026-06-02.
 
 ---
 
-## 1. Correctness: The "Zombie" Node (Revival without Gossip)
+## 1. Correctness: The "Zombie" Node (Revival without Gossip) — filed Issue 3 (P2)
 
 **File:** `lib/swim_ex/protocol.ex:483-503` (update_node_alive/2)
 
@@ -40,7 +40,7 @@ to ensure they spread faster than the suspicions they refute.
 
 ---
 
-## 2. Race Condition: Stale Timer firings
+## 2. Race Condition: Stale Timer firings — filed Issue 4 (P2)
 
 **File:** `lib/swim_ex/protocol.ex:168-185`
 (`handle_info({:ping_timeout, seq}, ...)` and
@@ -93,7 +93,7 @@ the timeout.
 
 ---
 
-## 3. Correctness: `next_probe_target` skipping nodes
+## 3. Correctness: `next_probe_target` skipping nodes — filed Issue 6 (P3)
 
 **File:** `lib/swim_ex/protocol.ex:215-234`
 
@@ -125,7 +125,7 @@ maintain fair round-robin.
 
 ---
 
-## 4. Performance: Gossip Packing $O(N^2)$
+## 4. Performance: Gossip Packing $O(N^2)$ — filed Issue 8 (P3)
 
 **File:** `lib/swim_ex/gossip_queue.ex:126-138`
 
@@ -149,7 +149,7 @@ packing algorithm.
 
 ---
 
-## 5. Potential Leak: Subscriber Monitors
+## 5. Potential Leak: Subscriber Monitors — filed Issue 9 (P3)
 
 **File:** `lib/swim_ex/protocol.ex:108-111`
 (`handle_call({:subscribe, pid}, ...)`), `642-650`
@@ -178,7 +178,7 @@ re-subscribe if it restarts.
 
 ---
 
-## 6. Correctness: Incarnation Seeding
+## 6. Correctness: Incarnation Seeding — filed Issue 5 (P2)
 
 **File:** `lib/swim_ex/protocol.ex:94`
 `incarnation = System.system_time(:millisecond)`
@@ -194,7 +194,7 @@ in an ETS table that survives `Protocol` crashes.
 
 ---
 
-## 7. Missing Tests
+## 7. Missing Tests — filed Issue 7 (P3)
 
 - **MTU Edge Case:** Test where exactly one more event would
   exceed MTU.
@@ -212,7 +212,7 @@ suite's robustness.
 
 ---
 
-## 8. Potential Uncaught Exceptions
+## 8. Potential Uncaught Exceptions — not an issue
 
 **File:** `lib/swim_ex/codec.ex:32-34` (`decode`)
 ```elixir
