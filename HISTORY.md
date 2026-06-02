@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 13 :: No runtime guard prevents multiplier=0 in GossipQueue.enqueue
+**Decision:** fixed — 2026-06-02
+
+**Problem:** The @spec for enqueue/3 documents multiplier as pos_integer() but Elixir specs are not enforced at runtime. If multiplier=0 is passed, limit * 0 = 0 and new_count >= 0 is always true, so every entry is immediately evicted on its first pack without ever being transmitted to any peer. Current callers only pass the literal constant @refutation_multiplier=2 or the default 1, so this is not reachable today, but there is no guard preventing a future caller from computing a zero multiplier via arithmetic.
+
+**Solution:** Added when multiplier > 0 guard to GossipQueue.enqueue/3, enforcing the pos_integer() type spec at runtime. Merged in commit af08479.
+
+---
+
+
 ## ISSUE 12 :: Refutation-multiplier rule duplicated across three Protocol call sites
 **Decision:** fixed — 2026-06-02
 
