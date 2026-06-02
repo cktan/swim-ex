@@ -122,6 +122,7 @@ defmodule SwimEx.Protocol do
       pending: %{},
       suspicion_timers: %{},
       seq: 0,
+      # NOTE: Subscribers are lost on restart. See USAGE.md "Restart caveat".
       subscribers: %{},
       seeds: normalize_seeds(Keyword.get(opts, :seeds, [])),
       ping_times: %{}

@@ -133,9 +133,11 @@ Dead subscriber processes are removed automatically via
 `Process.monitor/1`.
 
 > **Restart caveat:** if the `Protocol` process crashes and is
-> restarted by its supervisor, the subscription list is lost.
-> Subscribers should monitor the `Protocol` process and
-> re-subscribe if it restarts to continue receiving events.
+> restarted by its supervisor, the subscription list is lost because
+> it is held in the process state. Existing subscribers receive no
+> notification of this crash (other than via their own monitors).
+> Subscribers should monitor the `Protocol` process and re-subscribe
+> if it restarts to continue receiving events.
 
 ### Graceful leave
 
