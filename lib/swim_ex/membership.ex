@@ -125,7 +125,7 @@ defmodule SwimEx.Membership do
 
   @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), status()}]
   def list(%__MODULE__{} = state, opts \\ []) do
-    include_dead = Keyword.get(opts, :include_dead, true)
+    include_dead = Keyword.get(opts, :include_dead, false)
 
     state.members
     |> Enum.reject(fn {_, m} -> not include_dead and m.status == :dead end)

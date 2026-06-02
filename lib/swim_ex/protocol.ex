@@ -408,8 +408,8 @@ defmodule SwimEx.Protocol do
 
   defp handle_message({:fwd_ack, from, seq, source, events}, _source_addr, state) do
     state = apply_gossip_events(events, state)
-    state = update_node_alive(source, state)
     _ = from
+    _ = source
     cancel_pending(seq, state)
   end
 
@@ -581,8 +581,8 @@ defmodule SwimEx.Protocol do
   end
 
   defp apply_single_event(state, {kind, node, inc}) when node == state.self_id do
-    # Self-refutation: if we receive suspect about ourselves, bump incarnation
-    if kind == :suspect and inc >= state.incarnation do
+    # Self-refutation: if we receive suspect or dead about ourselves, bump incarnation
+    if kind in [:suspect, :dead] and inc >= state.incarnation do
       new_inc = inc + 1
       state = %{state | incarnation: new_inc}
       event = {:alive, state.self_id, new_inc}

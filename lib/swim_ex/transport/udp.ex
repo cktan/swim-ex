@@ -9,6 +9,7 @@ defmodule SwimEx.Transport.UDP do
   """
 
   use GenServer
+  require Logger
   @behaviour SwimEx.Transport
 
   defstruct [:socket, :receiver]
@@ -25,14 +26,8 @@ defmodule SwimEx.Transport.UDP do
 
   @impl SwimEx.Transport
   def send(server, {host, port}, data) when is_binary(data) do
-    case resolve(host) do
-      {:ok, ip} ->
-        GenServer.cast(server, {:send, ip, port, data})
-        :ok
-
-      {:error, _} = err ->
-        err
-    end
+    GenServer.cast(server, {:send, host, port, data})
+    :ok
   end
 
   @impl SwimEx.Transport
@@ -68,8 +63,15 @@ defmodule SwimEx.Transport.UDP do
   end
 
   @impl GenServer
-  def handle_cast({:send, ip, port, data}, state) do
-    _ = :gen_udp.send(state.socket, ip, port, data)
+  def handle_cast({:send, host, port, data}, state) do
+    case resolve(host) do
+      {:ok, ip} ->
+        _ = :gen_udp.send(state.socket, ip, port, data)
+
+      {:error, reason} ->
+        Logger.warning("failed to resolve host: #{inspect(host)} (reason: #{inspect(reason)})")
+    end
+
     {:noreply, state}
   end
 
