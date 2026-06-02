@@ -218,13 +218,13 @@ defmodule SwimEx.Protocol do
     {:noreply, state}
   end
 
-  def handle_info({:suspicion_timeout, node}, state) do
+  def handle_info({:suspicion_timeout, node, timeout_inc}, state) do
     state = Map.update!(state, :suspicion_timers, &Map.delete(&1, node))
 
     state =
       case Membership.get(state.membership, node) do
-        %{status: :suspect, incarnation: inc} ->
-          dead_node(node, inc, state)
+        %{status: :suspect, incarnation: ^timeout_inc} ->
+          dead_node(node, timeout_inc, state)
 
         _ ->
           state
@@ -526,7 +526,8 @@ defmodule SwimEx.Protocol do
     if Map.has_key?(state.suspicion_timers, node) do
       state
     else
-      ref = Process.send_after(self(), {:suspicion_timeout, node}, state.suspicion_timeout)
+      %{incarnation: inc} = Membership.get(state.membership, node)
+      ref = Process.send_after(self(), {:suspicion_timeout, node, inc}, state.suspicion_timeout)
       %{state | suspicion_timers: Map.put(state.suspicion_timers, node, ref)}
     end
   end

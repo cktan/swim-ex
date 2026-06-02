@@ -170,8 +170,8 @@ defmodule SwimEx.IntegrationTest do
     members_n2 = SwimEx.Protocol.members(n2, include_dead: false)
     members_n3 = SwimEx.Protocol.members(n3, include_dead: false)
 
-    refute Enum.any?(members_n2, fn {h, _, _, _} -> h == "e1" end)
-    refute Enum.any?(members_n3, fn {h, _, _, _} -> h == "e1" end)
+    refute Enum.any?(members_n2, fn {h, _, _, _, _} -> h == "e1" end)
+    refute Enum.any?(members_n3, fn {h, _, _, _, _} -> h == "e1" end)
   end
 
   # --- Telemetry ---
@@ -237,7 +237,7 @@ defmodule SwimEx.IntegrationTest do
 
     # n3 should still be alive after a few more periods
     members = SwimEx.Protocol.members(n2, include_dead: false)
-    n3_entry = Enum.find(members, fn {h, _, _, _} -> h == "h3" end)
+    n3_entry = Enum.find(members, fn {h, _, _, _, _} -> h == "h3" end)
     assert n3_entry != nil, "n3 should still be present"
     assert elem(n3_entry, 3) == :alive, "n3 should be alive after self-refutation, got: #{inspect(n3_entry)}"
   end

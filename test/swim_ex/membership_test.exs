@@ -184,7 +184,7 @@ defmodule SwimEx.MembershipTest do
 
     result = Membership.list(state, include_dead: false)
     assert length(result) == 1
-    assert {"10.0.0.2", 7771, "", :alive} in result
+    assert {"10.0.0.2", 7771, "", :alive, 1} in result
   end
 
   # --- Property tests ---

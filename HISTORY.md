@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 4 :: Suspicion timer race: stale suspicion_timeout can kill re-suspected node
+**Decision:** fixed — 2026-06-02
+
+**Problem:** Process.cancel_timer/1 does not guarantee the message is not already in the mailbox. If a suspicion_timeout fires just as cancel_suspicion_timer runs, handle_info({:suspicion_timeout, node}) will execute, check if the node is still :suspect, and may call dead_node prematurely — even if the node was re-suspected at a higher incarnation whose new timer has not yet fired.
+
+**Solution:** Include incarnation in :suspicion_timeout message and verify it in handle_info before marking node dead. Updated Membership.list/2 and all tests to include incarnation field.
+
+---
+
+
 ## ISSUE 5 :: Incarnation seeding via system_time unsafe under NTP step-back
 **Decision:** ignored — 2026-06-02
 

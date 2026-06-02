@@ -61,10 +61,10 @@ defmodule SwimEx.ProtocolTest do
     members1 = SwimEx.Protocol.members(n1, include_dead: false)
     members2 = SwimEx.Protocol.members(n2, include_dead: false)
 
-    assert Enum.any?(members1, fn {h, p, _, _} -> h == "n2" and p == 7001 end),
+    assert Enum.any?(members1, fn {h, p, _, _, _} -> h == "n2" and p == 7001 end),
            "n1 should know about n2, got: #{inspect(members1)}"
 
-    assert Enum.any?(members2, fn {h, p, _, _} -> h == "n1" and p == 7001 end),
+    assert Enum.any?(members2, fn {h, p, _, _, _} -> h == "n1" and p == 7001 end),
            "n2 should know about n1, got: #{inspect(members2)}"
   end
 
@@ -119,10 +119,10 @@ defmodule SwimEx.ProtocolTest do
     all = SwimEx.Protocol.members(n1, include_dead: true)
     alive_only = SwimEx.Protocol.members(n1, include_dead: false)
 
-    assert Enum.any?(all, fn {h, p, _, s} -> h == "n2" and p == 7005 and s == :dead end),
+    assert Enum.any?(all, fn {h, p, _, s, _} -> h == "n2" and p == 7005 and s == :dead end),
            "n2 should be dead in full list, got: #{inspect(all)}"
 
-    refute Enum.any?(alive_only, fn {h, p, _} -> h == "n2" and p == 7005 end),
+    refute Enum.any?(alive_only, fn {h, p, _, _, _} -> h == "n2" and p == 7005 end),
            "n2 should not appear in alive-only list, got: #{inspect(alive_only)}"
   end
 
@@ -152,7 +152,7 @@ defmodule SwimEx.ProtocolTest do
 
     # Confirm all peers know n1
     for n <- peers do
-      assert Enum.any?(SwimEx.Protocol.members(n, []), fn {h, _, _, _} -> h == "n1" end),
+      assert Enum.any?(SwimEx.Protocol.members(n, []), fn {h, _, _, _, _} -> h == "n1" end),
              "#{n} should know n1 before leave"
     end
 
@@ -205,7 +205,7 @@ defmodule SwimEx.ProtocolTest do
 
     Process.sleep(@t * 6)
 
-    assert Enum.any?(SwimEx.Protocol.members(n2, include_dead: false), fn {h, _, _, _} ->
+    assert Enum.any?(SwimEx.Protocol.members(n2, include_dead: false), fn {h, _, _, _, _} ->
              h == "n1"
            end)
 
@@ -214,7 +214,7 @@ defmodule SwimEx.ProtocolTest do
 
     members = SwimEx.Protocol.members(n2, include_dead: false)
 
-    refute Enum.any?(members, fn {h, _, _, _} -> h == "n1" end),
+    refute Enum.any?(members, fn {h, _, _, _, _} -> h == "n1" end),
            "n1 should have left, got: #{inspect(members)}"
   end
 

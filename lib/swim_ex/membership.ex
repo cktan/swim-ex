@@ -123,15 +123,15 @@ defmodule SwimEx.Membership do
     Enum.count(state.members, fn {_, m} -> m.status in [:alive, :suspect] end)
   end
 
-  @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), status()}]
+  @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), status(), non_neg_integer()}]
   def list(%__MODULE__{} = state, opts \\ []) do
     include_dead = Keyword.get(opts, :include_dead, false)
 
     state.members
     |> Enum.reject(fn {_, m} -> not include_dead and m.status == :dead end)
     |> Enum.map(fn
-      {{host, port, cookie}, m} -> {host, port, cookie, m.status}
-      {{host, port}, m} -> {host, port, "", m.status}
+      {{host, port, cookie}, m} -> {host, port, cookie, m.status, m.incarnation}
+      {{host, port}, m} -> {host, port, "", m.status, m.incarnation}
     end)
   end
 
