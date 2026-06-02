@@ -220,7 +220,13 @@ defmodule SwimEx.Protocol do
   end
 
   def handle_info({:suspicion_timeout, node, timeout_inc}, state) do
-    state = Map.update!(state, :suspicion_timers, &Map.delete(&1, node))
+    state =
+      Map.update!(state, :suspicion_timers, fn timers ->
+        case Map.get(timers, node) do
+          {_ref, ^timeout_inc} -> Map.delete(timers, node)
+          _ -> timers
+        end
+      end)
 
     state =
       case Membership.get(state.membership, node) do
@@ -524,19 +530,27 @@ defmodule SwimEx.Protocol do
   # --- Suspicion timers ---
 
   defp start_suspicion_timer(node, state) do
-    if Map.has_key?(state.suspicion_timers, node) do
-      state
-    else
-      %{incarnation: inc} = Membership.get(state.membership, node)
-      ref = Process.send_after(self(), {:suspicion_timeout, node, inc}, state.suspicion_timeout)
-      %{state | suspicion_timers: Map.put(state.suspicion_timers, node, ref)}
+    %{incarnation: inc} = Membership.get(state.membership, node)
+
+    case Map.get(state.suspicion_timers, node) do
+      {_ref, ^inc} ->
+        state
+
+      existing ->
+        if existing do
+          {ref, _} = existing
+          Process.cancel_timer(ref)
+        end
+
+        ref = Process.send_after(self(), {:suspicion_timeout, node, inc}, state.suspicion_timeout)
+        %{state | suspicion_timers: Map.put(state.suspicion_timers, node, {ref, inc})}
     end
   end
 
   defp cancel_suspicion_timer(node, state) do
     case Map.pop(state.suspicion_timers, node) do
       {nil, _} -> state
-      {ref, timers} ->
+      {{ref, _inc}, timers} ->
         Process.cancel_timer(ref)
         %{state | suspicion_timers: timers}
     end

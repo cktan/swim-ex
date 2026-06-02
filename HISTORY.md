@@ -4,6 +4,15 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 10 :: start_suspicion_timer does not refresh timer when incarnation advances while a timer is pending
+**Decision:** fixed — 2026-06-02
+
+**Problem:** When suspect(N, inc2) arrives before alive(N, inc2) clears the inc1 timer, start_suspicion_timer sees Map.has_key?(timers, N) is true and skips scheduling. The inc1 timer fires and is discarded (incarnation mismatch), leaving N permanently :suspect at inc2 on that observer until dead(N,...) gossip arrives from peers or N is suspected again at a higher incarnation.
+
+**Solution:** Store {ref, inc} in suspicion_timers instead of bare ref. In start_suspicion_timer, cancel+replace the existing timer when the stored incarnation differs from the node's current incarnation. Update cancel_suspicion_timer and handle_info to handle {ref, inc} tuple and safely delete only when incarnations match.
+
+---
+
 ## ISSUE 4 :: Suspicion timer race: stale suspicion_timeout can kill re-suspected node
 **Decision:** fixed — 2026-06-02
 
