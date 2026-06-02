@@ -262,23 +262,19 @@ defmodule SwimEx.Protocol do
 
   defp next_probe_target(state) do
     peers = probe_candidates(state)
+    peers_set = MapSet.new(peers)
+    probe_list = Enum.reject(state.probe_list, &(not MapSet.member?(peers_set, &1)))
 
-    case state.probe_list do
+    case probe_list do
       [] when peers == [] ->
-        {nil, state}
+        {nil, %{state | probe_list: []}}
 
       [] ->
-        shuffled = Enum.shuffle(peers)
-        [next | rest] = shuffled
+        [next | rest] = Enum.shuffle(peers)
         {next, %{state | probe_list: rest}}
 
       [next | rest] ->
-        if next in peers do
-          {next, %{state | probe_list: rest}}
-        else
-          # Node left membership; skip and retry
-          next_probe_target(%{state | probe_list: rest})
-        end
+        {next, %{state | probe_list: rest}}
     end
   end
 
