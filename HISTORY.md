@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 5 :: Incarnation seeding via system_time unsafe under NTP step-back
+**Decision:** ignored — 2026-06-02
+
+**Problem:** Protocol seeds the local node's incarnation with System.system_time(:millisecond). If the node crashes and restarts quickly while NTP steps the clock back, the new incarnation may be <= the old one, causing every other node to ignore the restarting node's alive events (they expect a strictly higher incarnation). This is already flagged in DESIGN.md but has no code-level mitigation.
+
+**Solution:** Won't fix: we don't want an ETS table for reincarnation number.
+
+---
+
+
 ## ISSUE 2 :: Protocol correctness and transport improvements
 **Decision:** fixed — 2026-06-02
 
