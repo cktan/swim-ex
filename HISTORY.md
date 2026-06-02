@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 11 :: transmit_limit(0) special case violated by multiplier>1
+**Decision:** ignored — 2026-06-02
+
+**Problem:** transmit_limit(0) returns 1 as a special-case minimum, intended to cap entries to a single transmit in zero-member clusters. The new eviction condition (new_count >= limit * entry.multiplier) means a refutation entry with multiplier=2 survives two packs instead of one when n=0, silently overriding the cap. There is no guard in pack/3 preventing it from being called with n=0.
+
+**Solution:** The described behaviour is correct and intentional. transmit_limit(0)=1 is a floor to avoid a zero-transmit degenerate case, not a cap on urgency multipliers. Clamping to limit at N=0 would silently revert the issue7 packet-loss protection (startup self-alive enqueued with @refutation_multiplier=2 to survive 2 seed ping attempts). Branch wip/issue11 not merged.
+
+---
+
+
 ## ISSUE 9 :: Document subscriber re-subscription requirement after Protocol restart
 **Decision:** fixed — 2026-06-02
 
