@@ -95,20 +95,21 @@ All functions accept an optional `name` argument (default
 ```elixir
 # All alive + suspect nodes (dead filtered by default)
 SwimEx.members()
-#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.3", 7771, "c1", :suspect}]
+#=> [{"10.0.0.2", 7771, "c1", :alive, 3}, {"10.0.0.3", 7771, "c1", :suspect, 1}]
 
 # Include dead entries (useful for debugging)
 SwimEx.members(include_dead: true)
-#=> [{"10.0.0.2", 7771, "c1", :alive}, {"10.0.0.4", 7771, "c1", :dead}]
+#=> [{"10.0.0.2", 7771, "c1", :alive, 3}, {"10.0.0.4", 7771, "c1", :dead, 2}]
 
 # Named instance
 SwimEx.members(:my_cluster)
 SwimEx.members(:my_cluster, include_dead: false)
 ```
 
-Each member is a 4-tuple `{host, port, cookie, status}` where
-`host` is the string passed at startup and `status` is
-`:alive`, `:suspect`, or `:dead`.
+Each member is a 5-tuple `{host, port, cookie, status, incarnation}`
+where `host` is the string passed at startup, `status` is
+`:alive`, `:suspect`, or `:dead`, and `incarnation` is the
+node's current incarnation number.
 
 ### Subscribe to events
 
