@@ -143,6 +143,32 @@ defmodule SwimEx.GossipQueueTest do
       end
     end
   end
+  test "event with multiplier stays in queue longer" do
+    n = 1
+    limit = GossipQueue.transmit_limit(n)
+    multiplier = 2
+
+    q = GossipQueue.new() |> GossipQueue.enqueue({:alive, @node_a, 1}, multiplier)
+
+    # After limit steps, it should still be there
+    q_at_limit =
+      Enum.reduce(1..limit, q, fn _, acc ->
+        {_, acc} = GossipQueue.pack(acc, n, @big_mtu)
+        acc
+      end)
+
+    assert GossipQueue.size(q_at_limit) == 1
+
+    # After multiplier * limit steps, it should be gone
+    final_q =
+      Enum.reduce((limit + 1)..(multiplier * limit), q_at_limit, fn _, acc ->
+        {_, acc} = GossipQueue.pack(acc, n, @big_mtu)
+        acc
+      end)
+
+    assert GossipQueue.size(final_q) == 0
+  end
+
   test "transmit_limit/1 is ceil(log2(N+1)) * 3" do
     assert GossipQueue.transmit_limit(0) == 1
     assert GossipQueue.transmit_limit(1) == 3

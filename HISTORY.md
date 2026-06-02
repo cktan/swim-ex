@@ -14,6 +14,16 @@ Closed issues — fixed or ignored.
 ---
 
 
+## ISSUE 3 :: Zombie node revival: alive gossip may not outpace suspect gossip
+**Decision:** fixed — 2026-06-02
+
+**Problem:** When a node transitions from :suspect back to :alive, update_node_alive/2 enqueues one alive gossip event at the default transmit limit. If suspect gossip from other nodes reaches its transmit limit after the alive event is exhausted, some peers may never converge back to :alive and will eventually fire their local suspicion timer, falsely declaring the node dead.
+
+**Solution:** Introduced a `multiplier` to `GossipQueue` entries. Updated `Protocol` to use a `@refutation_multiplier` of 2 for `alive` events that refute a `suspect` or `dead` status, ensuring they propagate further than standard gossip and have a better chance of reaching all nodes despite "competing" suspect gossip.
+
+---
+
+
 ## ISSUE 5 :: Incarnation seeding via system_time unsafe under NTP step-back
 **Decision:** ignored — 2026-06-02
 

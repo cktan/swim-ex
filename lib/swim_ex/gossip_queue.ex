@@ -19,7 +19,8 @@ defmodule SwimEx.GossipQueue do
   @type entry :: %{
           event: event(),
           priority: 0 | 1 | 2,
-          transmit_count: non_neg_integer()
+          transmit_count: non_neg_integer(),
+          multiplier: pos_integer()
         }
 
   @type t :: %__MODULE__{entries: [entry()]}
@@ -28,8 +29,8 @@ defmodule SwimEx.GossipQueue do
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
-  @spec enqueue(t(), event()) :: t()
-  def enqueue(%__MODULE__{} = q, event) do
+  @spec enqueue(t(), event(), pos_integer()) :: t()
+  def enqueue(%__MODULE__{} = q, event, multiplier \\ 1) do
     p = priority(event)
     node = node_of(event)
     inc = inc_of(event)
@@ -37,17 +38,17 @@ defmodule SwimEx.GossipQueue do
     entries =
       case find_existing(q.entries, node) do
         nil ->
-          [make_entry(event, p) | q.entries]
+          [make_entry(event, p, multiplier) | q.entries]
 
         existing ->
           existing_inc = inc_of(existing.event)
 
           cond do
             inc > existing_inc ->
-              [make_entry(event, p) | reject_node(q.entries, node)]
+              [make_entry(event, p, multiplier) | reject_node(q.entries, node)]
 
             inc == existing_inc and p < existing.priority ->
-              [make_entry(event, p) | reject_node(q.entries, node)]
+              [make_entry(event, p, multiplier) | reject_node(q.entries, node)]
 
             true ->
               q.entries
@@ -75,7 +76,7 @@ defmodule SwimEx.GossipQueue do
       Enum.flat_map(sorted, fn entry ->
         if MapSet.member?(packed_set, entry) do
           new_count = entry.transmit_count + 1
-          if new_count >= limit, do: [], else: [%{entry | transmit_count: new_count}]
+          if new_count >= limit * entry.multiplier, do: [], else: [%{entry | transmit_count: new_count}]
         else
           [entry]
         end
@@ -101,8 +102,8 @@ defmodule SwimEx.GossipQueue do
   defp node_of({_, node, _}), do: node
   defp inc_of({_, _, inc}), do: inc
 
-  defp make_entry(event, priority) do
-    %{event: event, priority: priority, transmit_count: 0}
+  defp make_entry(event, priority, multiplier) do
+    %{event: event, priority: priority, transmit_count: 0, multiplier: multiplier}
   end
 
   defp find_existing(entries, node) do

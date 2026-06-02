@@ -38,6 +38,7 @@ defmodule SwimEx.Protocol do
   @default_dead_node_expiry 6000
 
   @mtu_margin 128
+  @refutation_multiplier 2
 
   defstruct [
     :self_id,
@@ -480,7 +481,7 @@ defmodule SwimEx.Protocol do
           # We only gossip if we transitioned from suspect/dead to alive.
           # Note: alive(N) will be overridden by suspect(N) at other nodes,
           # which is correct. The node itself must refute with N+1.
-          gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, current_inc})
+          gossip_queue = GossipQueue.enqueue(state.gossip_queue, {:alive, node, current_inc}, @refutation_multiplier)
           state = %{state | gossip_queue: gossip_queue}
           notify_subscribers({:swim, :node_up, node}, state)
         else
@@ -555,7 +556,12 @@ defmodule SwimEx.Protocol do
 
     state =
       if prev != curr do
-        queue = GossipQueue.enqueue(state.gossip_queue, event)
+        multiplier =
+          if kind == :alive and prev != nil and prev.status != :alive,
+            do: @refutation_multiplier,
+            else: 1
+
+        queue = GossipQueue.enqueue(state.gossip_queue, event, multiplier)
         state = %{state | gossip_queue: queue}
 
         cond do
@@ -587,7 +593,7 @@ defmodule SwimEx.Protocol do
       new_inc = inc + 1
       state = %{state | incarnation: new_inc}
       event = {:alive, state.self_id, new_inc}
-      queue = GossipQueue.enqueue(state.gossip_queue, event)
+      queue = GossipQueue.enqueue(state.gossip_queue, event, @refutation_multiplier)
       %{state | gossip_queue: queue}
     else
       state
