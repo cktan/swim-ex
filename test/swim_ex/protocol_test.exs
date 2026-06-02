@@ -257,4 +257,24 @@ defmodule SwimEx.ProtocolTest do
              _ -> false
            end)
   end
+
+  test "alive gossip for GC'd node gets refutation multiplier", %{net: net} do
+    {_t, name} = start_node(net, "n1", 9010)
+    pid = GenServer.whereis(name)
+
+    ghost = {"ghost", 9010, ""}
+    peer = {"peer", 9010, ""}
+
+    {:ok, data} = SwimEx.Codec.encode({:ack, peer, 0, [{:alive, ghost, 1}]})
+    send(pid, {:swim_packet, peer, data})
+
+    # flush the message before reading state
+    :sys.get_state(pid)
+
+    state = :sys.get_state(pid)
+    entry = Enum.find(state.gossip_queue.entries, fn e -> elem(e.event, 1) == ghost end)
+
+    assert entry != nil, "alive event for unknown node should be queued"
+    assert entry.multiplier == 2, "expected refutation multiplier, got #{inspect(entry)}"
+  end
 end

@@ -557,7 +557,7 @@ defmodule SwimEx.Protocol do
     state =
       if prev != curr do
         multiplier =
-          if kind == :alive and prev != nil and prev.status != :alive,
+          if kind == :alive and (prev == nil or prev.status != :alive),
             do: @refutation_multiplier,
             else: 1
 

@@ -169,6 +169,17 @@ defmodule SwimEx.GossipQueueTest do
     assert GossipQueue.size(final_q) == 0
   end
 
+  test "same-incarnation higher-priority supersede preserves max multiplier" do
+    q = GossipQueue.new() |> GossipQueue.enqueue({:alive, @node_a, 5}, 2)
+
+    # suspect priority=1 < alive priority=2, same incarnation → supersedes
+    q = GossipQueue.enqueue(q, {:suspect, @node_a, 5})
+
+    [entry] = q.entries
+    assert entry.event == {:suspect, @node_a, 5}
+    assert entry.multiplier == 2
+  end
+
   test "transmit_limit/1 is ceil(log2(N+1)) * 3" do
     assert GossipQueue.transmit_limit(0) == 1
     assert GossipQueue.transmit_limit(1) == 3

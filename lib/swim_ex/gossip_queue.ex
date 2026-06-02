@@ -48,7 +48,8 @@ defmodule SwimEx.GossipQueue do
               [make_entry(event, p, multiplier) | reject_node(q.entries, node)]
 
             inc == existing_inc and p < existing.priority ->
-              [make_entry(event, p, multiplier) | reject_node(q.entries, node)]
+              effective = max(multiplier, existing.multiplier)
+              [make_entry(event, p, effective) | reject_node(q.entries, node)]
 
             true ->
               q.entries
