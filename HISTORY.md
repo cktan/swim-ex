@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 9 :: Document subscriber re-subscription requirement after Protocol restart
+**Decision:** fixed — 2026-06-02
+
+**Problem:** If the Protocol process crashes and is restarted by its supervisor, the subscribers map is lost. Existing subscribers receive no notification and their monitors on the Protocol pid become stale. There is no guidance in USAGE.md about this behaviour.
+
+**Solution:** Added explanation to USAGE.md restart caveat: subscription list is held in process state and lost on restart; existing subscribers receive no notification other than their own monitors. Added comment in protocol.ex pointing to the caveat. Merged in commit e6772f4.
+
+---
+
+
 ## ISSUE 8 :: GossipQueue.pack/2 called on every message; profile for large clusters
 **Decision:** fixed — 2026-06-02
 
