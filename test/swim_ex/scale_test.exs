@@ -63,12 +63,14 @@ defmodule SwimEx.ScaleTest do
     transport_name = :"t_#{host}_#{port}"
     node_name = :"n_#{host}_#{port}"
 
-    {:ok, t_pid} =
-      InMemory.start_link(
+    transport_opts =
+      [
         network: net,
         identity: {host, port, ""},
         name: transport_name
-      )
+      ] ++ Keyword.take(extra, [:packet_loss, :delay_ms, :reorder])
+
+    {:ok, t_pid} = InMemory.start_link(transport_opts)
 
     {:ok, n_pid} =
       SwimEx.Protocol.start_link(
@@ -580,7 +582,7 @@ defmodule SwimEx.ScaleTest do
     assert result == :ok, "initial convergence failed"
 
     IO.puts("Starting rolling upgrade of 64 nodes in batches of 8...")
-    
+
     # We perform rolling upgrade in 8 batches of 8 nodes each
     nodes =
       Enum.chunk_every(1..64, 8)
@@ -600,7 +602,7 @@ defmodule SwimEx.ScaleTest do
             33 -> [incarnation: 2, seeds: [seed_a]]
             _ -> [incarnation: 2, seeds: seeds]
           end
-          
+
           new_node = node_opts(net, host, 2300, opts)
           List.replace_at(current_nodes, idx - 1, new_node)
         end)
@@ -613,6 +615,23 @@ defmodule SwimEx.ScaleTest do
     IO.puts("Waiting for full convergence after rolling upgrade...")
     result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
     assert result == :ok, "re-convergence failed after rolling upgrade"
+  end
+
+  @tag timeout: 120_000
+  test "64-node network: high latency jitter and delay stress", %{net: net} do
+    seed = {"delay_node_1", 2400}
+    nodes = for i <- 1..64 do
+      # Introduce heterogeneous fixed delay per node to simulate network jitter
+      delay = rem(i, 4) * 8 # 0ms, 8ms, 16ms, 24ms
+      opts = if i == 1, do: [delay_ms: delay], else: [seeds: [seed], delay_ms: delay]
+      node_opts(net, "delay_node_#{i}", 2400, opts)
+    end
+
+    IO.puts("Waiting for convergence under high latency jitter...")
+    # Because of latency delays exceeding @ping_timeout (20ms) for some nodes,
+    # convergence will require indirect pings and suspicion refutations.
+    result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "convergence under high latency jitter failed"
   end
 
   # Event loop for a collector process that subscribes to node protocol events.
