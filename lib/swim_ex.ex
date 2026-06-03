@@ -12,6 +12,21 @@ defmodule SwimEx do
 
       SwimEx.subscribe()
       SwimEx.members()
+
+  ## Membership events
+
+  After calling `subscribe/1`, the calling process receives
+  messages of the form:
+
+      {:swim, event, node_id}
+
+  where `event` is one of:
+
+    * `:node_up` — a node became (or was confirmed) alive
+    * `:node_suspect` — a node is suspected dead
+    * `:node_down` — a node is confirmed dead
+
+  and `node_id` is `{host, port, cookie}`.
   """
 
   @default_name :swim
@@ -35,10 +50,15 @@ defmodule SwimEx do
   @doc """
   Subscribes the calling process to membership events.
 
-  Events will be sent as messages to the calling process.
+  The caller receives messages of the form
+  `{:swim, event, node_id}` where `event` is
+  `:node_up`, `:node_suspect`, or `:node_down`, and
+  `node_id` is `{host, port, cookie}`. See the module
+  doc for details.
 
   ## Parameters
-    - `name`: (optional) The registered name of the SwimEx instance. Defaults to `:swim`.
+    - `name`: (optional) The registered name of the
+      SwimEx instance. Defaults to `:swim`.
 
   ## Returns
     - `:ok`
