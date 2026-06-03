@@ -421,17 +421,22 @@ defmodule SwimEx.ScaleTest do
     assert result == :ok, "cluster did not heal after asymmetric partition"
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 180_000
   test "64-node network: 30% packet loss stress", %{net: net} do
     seed = {"lossy_node_1", 3000}
+    # With 30% symmetric packet loss each indirect-ping path succeeds with only
+    # ~24% probability, making the default 160ms suspicion window too short for
+    # nodes to hear and refute their own suspicion before being declared dead.
+    # Use a longer suspicion_timeout so refutation gossip has time to propagate.
     nodes = for i <- 1..64 do
-      opts = if i == 1, do: [packet_loss: 0.3], else: [seeds: [seed], packet_loss: 0.3]
+      opts = if i == 1,
+        do: [packet_loss: 0.3, suspicion_timeout: @t * @suspicion_mult * 8],
+        else: [seeds: [seed], packet_loss: 0.3, suspicion_timeout: @t * @suspicion_mult * 8]
       node_opts(net, "lossy_node_#{i}", 3000, opts)
     end
 
     IO.puts("Waiting for convergence with 30% packet loss...")
-    # Should take much longer
-    result = wait_for(@convergence_timeout * 6, fn -> all_converged?(nodes, 64) end)
+    result = wait_for(@convergence_timeout * 20, fn -> all_converged?(nodes, 64) end)
     assert result == :ok, "convergence with 30% packet loss failed"
   end
 
@@ -632,6 +637,29 @@ defmodule SwimEx.ScaleTest do
     # convergence will require indirect pings and suspicion refutations.
     result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
     assert result == :ok, "convergence under high latency jitter failed"
+  end
+
+  @tag timeout: 120_000
+  test "64-node network: bootstrap storm simulation", %{net: net} do
+    seed_host = "boot_node_1"
+    seed_port = 2500
+    seed = {seed_host, seed_port}
+
+    IO.puts("Starting seed node...")
+    seed_node = node_opts(net, seed_host, seed_port, [])
+
+    IO.puts("Spawning remaining 63 nodes sequentially (bootstrap storm)...")
+    # Spawn client nodes directly in the test process to ensure they are properly linked to it
+    client_nodes =
+      for i <- 2..64 do
+        node_opts(net, "boot_node_#{i}", seed_port, seeds: [seed])
+      end
+
+    all_nodes = [seed_node | client_nodes]
+
+    IO.puts("Waiting for convergence after bootstrap storm...")
+    result = wait_for(@convergence_timeout * 4, fn -> all_converged?(all_nodes, 64) end)
+    assert result == :ok, "convergence after bootstrap storm failed"
   end
 
   # Event loop for a collector process that subscribes to node protocol events.

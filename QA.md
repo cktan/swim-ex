@@ -57,6 +57,17 @@ Located in `test/swim_ex/scale_test.exs`, these tests use the `InMemory` transpo
     batch with `incarnation: 2` while leaving the rest of
     the cluster live. Verifies uninterrupted convergence
     across a full rolling upgrade.
+*   **High Latency Jitter and Delay Stress**: Assigns each
+    node a fixed send delay (0/8/16/24 ms in rotation).
+    Nodes with 24 ms delay exceed `@ping_timeout` (20 ms),
+    so all their direct pings time out and the indirect-ping
+    path is exercised for every probe. Verifies convergence
+    under heterogeneous latency.
+*   **Bootstrap Storm**: Starts a single seed, then spawns
+    all 63 remaining nodes in rapid sequential succession
+    from the test process, simulating a simultaneous cold
+    boot. Verifies the cluster converges despite the seed
+    receiving a burst of join requests.
 
 ## Testing Infrastructure
 
@@ -78,7 +89,7 @@ mix test
 ```
 
 ### Scale Suite
-Runs the 64-node stress tests (may take 20-40 seconds):
+Runs the 64-node stress tests (may take 2-3 minutes):
 ```bash
 mix test test/swim_ex/scale_test.exs
 ```
