@@ -1,6 +1,33 @@
 defmodule SwimEx.ScaleTest do
   @moduledoc """
-  Large scale stress tests for SwimEx.
+  Large-scale stress and convergence tests for SwimEx.
+
+  This test suite simulates clusters of up to 64 nodes running the SWIM protocol
+  (including the suspicion mechanism) using an in-memory transport layer.
+  It validates the protocol's correctness, robustness, and performance characteristics
+  under various network topologies, failures, partitions, packet loss, and churn.
+
+  ## Parameters
+  The protocol and simulation run under accelerated parameters to ensure tests run
+  quickly while preserving the relative timing ratios of the protocol:
+  * `@t` (40ms): The protocol period. Every `@t` milliseconds, a node initiates a probe.
+  * `@ping_timeout` (20ms): The timeout for a direct ping request.
+  * `@suspicion_mult` (4): The multiplier for the suspicion timeout.
+  * `@convergence_timeout` (`@t * 150` = 6000ms): The deadline for the cluster to achieve consensus/full membership view.
+
+  ## Simulated Scenarios
+  1. **Staged Startup, Failure Detection, & Pause/Unpause**:
+     Ensures nodes can bootstrap via a seed, detect node failures, handle node pausing (simulated high packet loss), and gracefully leave the cluster.
+  2. **Partition and Heal**:
+     Tests split-brain situations by cleanly partitioning the 64-node cluster into two equal groups, then verifying that they heal back into a single cluster.
+  3. **Asymmetric Partition**:
+     Isolates a single node from the remaining 63 nodes, verifying that both sides correctly detect the state transition and recover once healed.
+  4. **Packet Loss**:
+     Stress tests cluster convergence under 30% packet loss.
+  5. **Churn (Restarting Nodes)**:
+     Tests robustness against node failure and subsequent restart.
+  6. **Half-Cluster Restart (Immediate vs Staged)**:
+     Validates the incarnation increment mechanism by stopping half the cluster and restarting them (either immediately or after their death has been propagated).
   """
 
   use ExUnit.Case
@@ -13,6 +40,25 @@ defmodule SwimEx.ScaleTest do
   @suspicion_mult 4
   @convergence_timeout @t * 150 
 
+  # Helper to configure and start a single simulated SWIM node.
+  #
+  # Spawns both the transport process (`SwimEx.Transport.InMemory`) and the protocol
+  # process (`SwimEx.Protocol`).
+  #
+  # ## Arguments
+  # * `net` - The pid of the shared `SwimEx.Transport.InMemory.Network` process.
+  # * `host` - The host name string for the node (e.g. `"node_1"`).
+  # * `port` - The port integer for the node (e.g. `1000`).
+  # * `extra` - Keyword list of extra options/overrides to merge into the node protocol parameters.
+  #
+  # ## Returns
+  # A map containing:
+  # * `:t` - The registered name of the transport process.
+  # * `:n` - The registered name of the protocol process.
+  # * `:t_pid` - The PID of the transport process.
+  # * `:n_pid` - The PID of the protocol process.
+  # * `:host` - The host name.
+  # * `:port` - The port.
   defp node_opts(net, host, port, extra \\ []) do
     transport_name = :"t_#{host}_#{port}"
     node_name = :"n_#{host}_#{port}"
@@ -47,11 +93,23 @@ defmodule SwimEx.ScaleTest do
     %{t: transport_name, n: node_name, t_pid: t_pid, n_pid: n_pid, host: host, port: port}
   end
 
+  # Helper that repeatedly runs a check function until it returns true or the timeout expires.
+  #
+  # ## Arguments
+  # * `timeout_ms` - Maximum duration in milliseconds to poll the check function.
+  # * `check_fn` - A zero-arity function returning a boolean.
+  #
+  # ## Returns
+  # * `:ok` - If `check_fn` returns true before the timeout.
+  # * `{:error, :timeout}` - If the timeout is reached.
   defp wait_for(timeout_ms, check_fn) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
     do_wait(deadline, check_fn)
   end
 
+  # Tail-recursive implementation of `wait_for/2`.
+  #
+  # Computes the remaining time before the deadline and sleeps briefly between attempts.
   defp do_wait(deadline, check_fn) do
     if check_fn.() do
       :ok
@@ -67,6 +125,14 @@ defmodule SwimEx.ScaleTest do
     end
   end
 
+  # Asserts that all nodes in the given list have converged and hold a complete membership view.
+  #
+  # In a fully connected cluster of `expected_count` nodes, each node must see
+  # `expected_count - 1` other alive members (excluding themselves).
+  #
+  # ## Arguments
+  # * `nodes` - List of maps representing the simulated nodes.
+  # * `expected_count` - The expected size of the cluster.
   defp all_converged?(nodes, expected_count) do
     Enum.all?(nodes, fn node ->
       members = SwimEx.Protocol.members(node.n, include_dead: false)
@@ -434,6 +500,14 @@ defmodule SwimEx.ScaleTest do
     assert result == :ok, "re-convergence failed after staged half-cluster restart"
   end
 
+  # Event loop for a collector process that subscribes to node protocol events.
+  #
+  # Forwards any received message to the parent test process, tagging it with the
+  # corresponding node's host name.
+  #
+  # ## Arguments
+  # * `parent` - PID of the test process to receive the forwarded events.
+  # * `host` - The host name of the node being monitored.
   defp loop_collector(parent, host) do
     receive do
       msg ->
