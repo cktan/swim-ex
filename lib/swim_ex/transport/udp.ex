@@ -99,6 +99,13 @@ defmodule SwimEx.Transport.UDP do
   @impl GenServer
   def handle_info(_msg, state), do: {:noreply, state}
 
+  @impl GenServer
+  def terminate(_reason, %{socket: socket}) when not is_nil(socket) do
+    :gen_udp.close(socket)
+  end
+
+  def terminate(_reason, _state), do: :ok
+
   # --- Helpers ---
 
   defp resolve(host) when is_binary(host) do

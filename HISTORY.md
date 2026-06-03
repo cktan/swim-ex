@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 15 :: Missing terminate/2 in SwimEx.Transport.UDP leaves socket unclosed on shutdown
+**Decision:** Add terminate/2 to close UDP socket — 2026-06-03
+
+**Problem:** The UDP GenServer opens a socket in init/1 but has no terminate/2 callback to call :gen_udp.close(socket). Erlang's VM closes the socket when the owner process exits, but explicitly closing it in terminate/2 is best practice for clean shutdown and makes the intent clear to future readers.
+
+**Solution:** Implemented terminate/2 in SwimEx.Transport.UDP that calls :gen_udp.close(socket).
+
+---
+
+
 ## ISSUE 14 :: Memory leak in SwimEx.Protocol: relay_to pending entries not cleaned up on ping timeout
 **Decision:** fixed — 2026-06-03
 
