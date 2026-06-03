@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 17 :: scale_test: verify subscriber event delivery at scale
+**Decision:** fixed — 2026-06-03
+
+**Problem:** subscribe/2 is a public API but has zero scale coverage. There is no test confirming that gossip drives the correct subscriber notifications at 64 nodes, only that internal membership state is updated.
+
+**Solution:** Added subscriber verification to the 64-node staged startup test by subscribing 5 collector processes to different live nodes before node 7 was stopped, asserting they each received the :node_down event, and then cleaning up the processes.
+
+---
+
+
 ## ISSUE 16 :: scale_test: assert graceful leave/1 is detected faster than suspicion timeout
 **Decision:** fixed — 2026-06-03
 

@@ -103,6 +103,22 @@ defmodule SwimEx.ScaleTest do
     result = wait_for(@convergence_timeout * 3, fn -> all_converged?(all_nodes, 64) end)
     assert result == :ok, "64 nodes did not converge"
 
+    # Subscribe a collector process to a handful of nodes (e.g., 5 random nodes)
+    # We filter out node_7 (which is about to be killed) and node_14 (which will be paused/gracefully leave later)
+    subscriber_nodes =
+      all_nodes
+      |> Enum.filter(fn n -> n.host not in ["node_7", "node_14"] end)
+      |> Enum.take(5)
+
+    parent = self()
+    collectors =
+      for node <- subscriber_nodes do
+        spawn_link(fn ->
+          SwimEx.Protocol.subscribe(node.n, self())
+          loop_collector(parent, node.host)
+        end)
+      end
+
     # Kill node 7
     node_7 = Enum.find(all_nodes, fn n -> n.host == "node_7" end)
     GenServer.stop(node_7.n_pid)
@@ -117,6 +133,18 @@ defmodule SwimEx.ScaleTest do
       end)
     end)
     assert result == :ok, "node_7 was not recognized as dead"
+
+    # Assert each subscriber received a :node_down event for node_7
+    for node <- subscriber_nodes do
+      host = node.host
+      assert_receive {^host, {:swim, :node_down, {"node_7", 1000, ""}}}, @t * @suspicion_mult * 20
+    end
+
+    # Clean up collector processes
+    Enum.each(collectors, fn pid ->
+      Process.unlink(pid)
+      Process.exit(pid, :kill)
+    end)
 
     # Pause node 14
     node_14 = Enum.find(all_nodes, fn n -> n.host == "node_14" end)
@@ -252,5 +280,13 @@ defmodule SwimEx.ScaleTest do
     IO.puts("Waiting for re-convergence after churn...")
     result = wait_for(@convergence_timeout * 4, fn -> all_converged?(nodes, 64) end)
     assert result == :ok, "re-convergence after churn failed"
+  end
+
+  defp loop_collector(parent, host) do
+    receive do
+      msg ->
+        send(parent, {host, msg})
+        loop_collector(parent, host)
+    end
   end
 end
