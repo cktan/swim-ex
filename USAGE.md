@@ -181,7 +181,8 @@ SwimEx.leave()
 Increments incarnation, broadcasts a dead announcement
 directly to `max(⌈N×0.25⌉, 8)` random peers (where `N`
 is the number of alive + suspect peers), then stops the
-supervisor tree.
+Protocol process. The supervisor restarts it; call
+`Supervisor.stop/1` afterward for a full shutdown.
 
 For an ungraceful stop (no dead broadcast), call
 `Supervisor.stop/1` directly on the supervisor.

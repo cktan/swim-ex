@@ -274,7 +274,9 @@ SwimEx.leave(name \\ :swim)
    `max(⌈N×0.25⌉, 8)` random peers (not via gossip
    queue), where `N` is the number of alive + suspect
    peers.
-3. Stops the supervisor tree.
+3. Stops the Protocol process. The supervisor
+   restarts it; call `Supervisor.stop/1` afterward
+   for a full shutdown.
 
 For a silent stop (no dead broadcast), call
 `Supervisor.stop/1` directly.
