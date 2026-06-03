@@ -201,6 +201,9 @@ defmodule SwimEx.Protocol do
         {target, _ref, :direct} ->
           send_indirect_pings(seq, target, state)
 
+        {_target, _ref, {:relay_to, _from, _orig_seq}} ->
+          %{state | pending: Map.delete(state.pending, seq)}
+
         _ ->
           state
       end
@@ -212,7 +215,7 @@ defmodule SwimEx.Protocol do
     state =
       case Map.pop(state.pending, seq) do
         {{target, _ref, :indirect}, pending} ->
-          state = %{state | pending: pending}
+          state = %{state | pending: pending, ping_times: Map.delete(state.ping_times, seq)}
           suspect_node(target, state)
 
         _ ->

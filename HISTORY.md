@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 14 :: Memory leak in SwimEx.Protocol: relay_to pending entries not cleaned up on ping timeout
+**Decision:** fixed — 2026-06-03
+
+**Problem:** In handle_info({:ping_timeout, seq}, state), only :direct ping entries are removed from state.pending. Entries of the form {:relay_to, from, seq} added by handle_message({:ping_req, ...}) are never removed if no ack arrives, causing the pending map to grow without bound.
+
+**Solution:** Updated handle_info({:ping_timeout, seq}, state) to remove {:relay_to, ...} entries from state.pending. Also updated handle_info({:indirect_timeout, seq}, state) to delete entries from state.ping_times. Added regression tests in test/swim_ex/repro_issue_14_test.exs.
+
+---
+
+
 ## ISSUE 13 :: No runtime guard prevents multiplier=0 in GossipQueue.enqueue
 **Decision:** fixed — 2026-06-02
 
