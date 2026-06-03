@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 21 :: Scale test: Multi-Way Partition and Heal scenario
+**Decision:** fixed — 2026-06-03
+
+**Problem:** The current scale test suite only tests 2-way split-brain scenarios, which does not exercise the protocol's ability to heal more complex topology disruptions.
+
+**Solution:** Added '64-node network: 4-way partition and gradual heal' test case to scale_test.exs, configuring multiple seed nodes to allow disconnected partition islands to merge back correctly upon healing.
+
+---
+
+
 ## ISSUE 20 :: scale_test: kill half the cluster and restart with new incarnations
 **Decision:** fixed — 2026-06-03
 
