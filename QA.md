@@ -20,13 +20,43 @@ Found in `test/swim_ex/integration_test.exs`, these tests use the `InMemory` tra
 Located in `test/swim_ex/scale_test.exs`, these tests use the `InMemory` transport at high node counts (64+) to stress the gossip and failure detection mechanisms.
 
 **Scenarios covered:**
-*   **Staged Startup**: Verifies that a cluster can converge when nodes join in waves.
-*   **Partition & Heal**: Uses `InMemory.Network.set_partitions/2` to simulate a "Split Brain" scenario. This verifies that:
-    1. Isolated groups remain stable.
-    2. Groups eventually merge back into a single cluster after the partition is removed.
-*   **High Packet Loss**: Simulates 30% packet loss across all nodes to ensure the protocol is robust against unreliable networks.
-*   **Churn Stress**: Randomly stops and restarts groups of nodes to ensure the membership list converges despite constant state changes.
-*   **Pause/Unpause**: Isolates a single node until it is declared dead by the cluster, then restores it to verify it can successfully rejoin.
+*   **Staged Startup, Failure Detection & Pause/Unpause**:
+    Brings 64 nodes online in two waves, kills one node
+    outright, pauses a second node (100% packet loss) until
+    declared dead, then restores it. Verifies event
+    delivery to subscribers, dead-entry GC, and graceful
+    leave.
+*   **Partition & Heal**: Uses `InMemory.Network.set_partitions/2`
+    to split 64 nodes into two groups of 32. Verifies each
+    group stabilises at 31 visible members, then merges
+    back to 63 after the partition is cleared.
+*   **4-way Partition & Gradual Heal**: Splits 64 nodes into
+    four groups of 16, verifies each group stabilises at
+    15 visible members, then heals in two stages (A+B and
+    C+D, then full heal) confirming incremental recovery.
+*   **Asymmetric Partition (1 vs 63)**: Isolates the seed
+    node from the 63-node majority. Verifies both sides
+    converge to their correct reduced view and reunite
+    after healing.
+*   **High Packet Loss**: Simulates 30% packet loss across
+    all nodes to ensure the protocol is robust against
+    unreliable networks.
+*   **Churn Stress**: Stops nodes 50–60 and waits for the
+    cluster to declare them dead, then restarts them.
+    Verifies full re-convergence.
+*   **Half-cluster Restart (Immediate)**: Kills nodes 1–32
+    (including the seed) and immediately restarts them with
+    `incarnation: 2`. Verifies the incarnation mechanism
+    overrides stale dead entries.
+*   **Half-cluster Restart (Staged)**: Same kill, but waits
+    for the surviving 32 nodes to mark all killed nodes as
+    dead before restarting with `incarnation: 2`. A stricter
+    test of dead-node refutation.
+*   **Rolling Upgrade Simulation**: Cycles through all 64
+    nodes in batches of 8, stopping and restarting each
+    batch with `incarnation: 2` while leaving the rest of
+    the cluster live. Verifies uninterrupted convergence
+    across a full rolling upgrade.
 
 ## Testing Infrastructure
 
