@@ -213,7 +213,8 @@ defmodule SwimEx.ScaleTest do
       node_opts(net, "churn_node_#{i}", 4000, opts)
     end
 
-    wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
 
     IO.puts("Starting churn: killing and restarting nodes...")
     # Kill nodes 50-60
