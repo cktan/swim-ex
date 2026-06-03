@@ -9,6 +9,7 @@
 - **Hex:** public
 - **License:** MIT
 - **Elixir/OTP floor:** Elixir 1.15 / OTP 26
+- **Source Map:** See `MANIFEST.md` for file responsibilities.
 
 ---
 
@@ -338,6 +339,9 @@ unlucky streaks possible with pure random selection.
 - **Simulated network:** `SwimEx.Transport.InMemory`
   (test-only) supports injecting packet loss, delay,
   and reorder for protocol correctness tests.
+- **Large-scale Stress tests:** 64-node clusters
+  testing staged startup, churn, and network
+  partitions (see `QA.md` for details).
 - **Property tests (StreamData):**
   1. Encoding roundtrip: `∀ msg → encode → decode = msg`
   2. State machine: no invalid transitions regardless

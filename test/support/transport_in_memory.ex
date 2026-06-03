@@ -169,25 +169,64 @@ defmodule SwimEx.Transport.InMemory.Network do
     GenServer.cast(network, {:route, from, to, data})
   end
 
-  @impl GenServer
-  def init(_opts), do: {:ok, %{}}
-
-  @impl GenServer
-  def handle_call({:register, identity, pid}, _from, registry) do
-    {:reply, :ok, Map.put(registry, identity, pid)}
+  @doc """
+  Sets a partition between two sets of node hosts.
+  `groups` is a list of lists of host strings.
+  Communication is only allowed WITHIN each group.
+  Communication BETWEEN groups is dropped.
+  """
+  def set_partitions(network, groups) do
+    GenServer.call(network, {:set_partitions, groups})
   end
 
-  def handle_call({:unregister, identity}, _from, registry) do
-    {:reply, :ok, Map.delete(registry, identity)}
+  def clear_partitions(network) do
+    GenServer.call(network, :clear_partitions)
   end
 
   @impl GenServer
-  def handle_cast({:route, from, to, data}, registry) do
-    case Map.get(registry, to) do
-      nil -> :ok
-      pid -> SwimEx.Transport.InMemory.deliver(pid, from, data)
+  def init(_opts), do: {:ok, %{registry: %{}, partitions: nil}}
+
+  @impl GenServer
+  def handle_call({:register, identity, pid}, _from, state) do
+    {:reply, :ok, %{state | registry: Map.put(state.registry, identity, pid)}}
+  end
+
+  def handle_call({:unregister, identity}, _from, state) do
+    {:reply, :ok, %{state | registry: Map.delete(state.registry, identity)}}
+  end
+
+  def handle_call({:set_partitions, groups}, _from, state) do
+    # Create a map: host -> group_index
+    map = for {group, idx} <- Enum.with_index(groups),
+              host <- group,
+              into: %{},
+              do: {host, idx}
+    {:reply, :ok, %{state | partitions: map}}
+  end
+
+  def handle_call(:clear_partitions, _from, state) do
+    {:reply, :ok, %{state | partitions: nil}}
+  end
+
+  @impl GenServer
+  def handle_cast({:route, from, to, data}, state) do
+    if allowed?(from, to, state.partitions) do
+      case Map.get(state.registry, to) do
+        nil -> :ok
+        pid -> SwimEx.Transport.InMemory.deliver(pid, from, data)
+      end
     end
 
-    {:noreply, registry}
+    {:noreply, state}
+  end
+
+  defp allowed?(_from, _to, nil), do: true
+  defp allowed?({f_h, _, _}, {t_h, _, _}, partitions), do: allowed_host?(f_h, t_h, partitions)
+  defp allowed?({f_h, _}, {t_h, _}, partitions), do: allowed_host?(f_h, t_h, partitions)
+
+  defp allowed_host?(f_h, t_h, partitions) do
+    f_group = Map.get(partitions, f_h)
+    t_group = Map.get(partitions, t_h)
+    f_group == t_group
   end
 end

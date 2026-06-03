@@ -1,6 +1,8 @@
 # swim-ex — Claude Code Context
 
-<!-- Fill in: what this project is, language, key deps -->
+A SWIM-based membership protocol for Elixir.
+
+See `MANIFEST.md` for a map of source files and their purposes.
 
 ---
 
@@ -48,3 +50,14 @@ text only — do not reformat code blocks, tables, or headings.
   committing to one approach silently.
 - **Verification:** Always run the full test suite before
   committing. It must pass.
+
+---
+
+## Test commands
+
+- **Standard suite:** `mix test`
+- **Scale/Stress suite:** `mix test test/swim_ex/scale_test.exs`
+- **Coverage:** `mix test --cover`
+
+See `QA.md` for a detailed description of the testing
+infrastructure, fault injection, and scale scenarios.

@@ -191,7 +191,7 @@ defmodule SwimEx.Protocol do
   end
 
   def handle_info(:seed_retry, state) do
-    state = ping_seeds_if_alone(state)
+    state = ping_seeds(state)
     schedule_seed_retry(state)
     {:noreply, state}
   end
@@ -628,13 +628,25 @@ defmodule SwimEx.Protocol do
 
   # --- Seeds ---
 
-  defp ping_seeds_if_alone(state) do
-    if Membership.member_count(state.membership) == 0 and state.seeds != [] do
-      Enum.reduce(state.seeds, state, fn seed, acc ->
-        send_ping(seed, acc)
-      end)
-    else
-      state
+  defp ping_seeds(state) do
+    case state.seeds do
+      [] ->
+        state
+
+      seeds ->
+        # If alone, ping all seeds to find the cluster.
+        # If already in a cluster, ping one random seed occasionally
+        # to ensure we haven't partitioned from other parts of the network.
+        seeds_to_ping =
+          if Membership.member_count(state.membership) == 0 do
+            seeds
+          else
+            [Enum.random(seeds)]
+          end
+
+        Enum.reduce(seeds_to_ping, state, fn seed, acc ->
+          send_ping(seed, acc)
+        end)
     end
   end
 
