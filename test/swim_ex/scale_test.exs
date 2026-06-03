@@ -248,6 +248,52 @@ defmodule SwimEx.ScaleTest do
   end
 
   @tag timeout: 120_000
+  test "64-node network: asymmetric partition (1 vs 63)", %{net: net} do
+    seed = {"ap_node_1", 2500}
+    nodes = for i <- 1..64 do
+      opts = if i == 1, do: [], else: [seeds: [seed]]
+      node_opts(net, "ap_node_#{i}", 2500, opts)
+    end
+
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
+
+    # Partition into one isolated node (the seed) and 63 majority nodes
+    isolated_host = "ap_node_1"
+    isolated_group = [isolated_host]
+    majority_group = for i <- 2..64, do: "ap_node_#{i}"
+
+    IO.puts("Isolating ap_node_1 from the other 63 nodes...")
+    Network.set_partitions(net, [isolated_group, majority_group])
+
+    # Isolated node should mark all 63 others as dead
+    # 63 majority nodes should mark the isolated node as dead
+    IO.puts("Waiting for asymmetric partition to stabilize...")
+    result = wait_for(@t * @suspicion_mult * 25, fn ->
+      isolated_node = Enum.find(nodes, fn n -> n.host == isolated_host end)
+      isolated_members = SwimEx.Protocol.members(isolated_node.n, include_dead: false)
+
+      majority_nodes = Enum.filter(nodes, fn n -> n.host != isolated_host end)
+      
+      length(isolated_members) == 0 and
+        Enum.all?(majority_nodes, fn node ->
+          members = SwimEx.Protocol.members(node.n, include_dead: false)
+          entry = Enum.find(members, fn {h, _, _, _, _} -> h == isolated_host end)
+          length(members) == 62 and entry == nil
+        end)
+    end)
+    assert result == :ok, "asymmetric partition stabilization failed"
+
+    # Heal the partition
+    IO.puts("Healing asymmetric partition...")
+    Network.clear_partitions(net)
+
+    # Cluster should merge back to 64
+    result = wait_for(@convergence_timeout * 4, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "cluster did not heal after asymmetric partition"
+  end
+
+  @tag timeout: 120_000
   test "64-node network: 30% packet loss stress", %{net: net} do
     seed = {"lossy_node_1", 3000}
     nodes = for i <- 1..64 do

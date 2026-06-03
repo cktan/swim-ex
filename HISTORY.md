@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 19 :: scale_test: asymmetric partition (1 vs 63 nodes)
+**Decision:** fixed — 2026-06-03
+
+**Problem:** The existing partition test cuts the network symmetrically (32/32). Isolating a single node (1 vs 63) exercises a different code path: the isolated node sees 63 peers go silent simultaneously, triggering mass suspicion, while the majority side marks just one node dead. After healing, the isolated node must re-seed and merge back — a scenario not covered by the balanced split.
+
+**Solution:** Added an asymmetric partition scale test (1 vs 63 nodes) where the seed node (ap_node_1) is isolated. The test verifies that the isolated node marks all 63 peers as dead, the 63 majority nodes mark the seed node as dead, and when healed, the cluster successfully re-converges to 64 nodes.
+
+---
+
+
 ## ISSUE 18 :: scale_test: assert dead node GC after dead_node_expiry
 **Decision:** fixed — 2026-06-03
 
