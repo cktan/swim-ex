@@ -29,6 +29,10 @@ defmodule SwimEx.Supervisor do
 
   use Supervisor
 
+  @doc """
+  Starts the SwimEx supervisor.
+  """
+  @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
     name = Keyword.get(opts, :name, :swim)
     Supervisor.start_link(__MODULE__, opts, name: :"#{name}_supervisor")

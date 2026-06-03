@@ -29,9 +29,20 @@ defmodule SwimEx.GossipQueue do
         }
   defstruct by_node: %{}, sorted_keys: :gb_sets.new()
 
+  @doc """
+  Creates a new, empty gossip queue.
+  """
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
+  @doc """
+  Enqueues a gossip event.
+
+  If an event for the same node already exists, the one with the higher incarnation wins.
+  If incarnations are equal, the event with higher priority (lower priority value) wins.
+
+  Returns the updated queue.
+  """
   @spec enqueue(t(), event(), pos_integer()) :: t()
   def enqueue(%__MODULE__{} = q, event, multiplier \\ 1) when multiplier > 0 do
     p = priority(event)
@@ -144,11 +155,15 @@ defmodule SwimEx.GossipQueue do
     end
   end
 
+  @doc """
+  Returns the number of events currently in the queue.
+  """
   @spec size(t()) :: non_neg_integer()
   def size(%__MODULE__{} = q), do: map_size(q.by_node)
 
   @doc """
   Returns all entries in the queue in priority order.
+
   Used primarily for testing and debugging.
   """
   @spec entries(t()) :: [entry()]
@@ -158,6 +173,11 @@ defmodule SwimEx.GossipQueue do
     |> Enum.map(fn {_, _, node} -> Map.fetch!(q.by_node, node) end)
   end
 
+  @doc """
+  Calculates the transmit limit for events based on the cluster size `n`.
+
+  Returns the integer transmit limit.
+  """
   @spec transmit_limit(non_neg_integer()) :: non_neg_integer()
   def transmit_limit(0), do: 1
   def transmit_limit(n), do: ceil(:math.log2(n + 1)) * 3

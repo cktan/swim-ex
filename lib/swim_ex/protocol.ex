@@ -66,23 +66,43 @@ defmodule SwimEx.Protocol do
 
   # --- Public API ---
 
+  @doc """
+  Starts the SWIM protocol GenServer.
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     name = Keyword.get(opts, :name, :swim)
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
+  @doc """
+  Returns current cluster members.
+  """
+  @spec members(GenServer.server(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), SwimEx.Membership.status(), non_neg_integer()}]
   def members(name, opts) do
     GenServer.call(name, {:members, opts})
   end
 
+  @doc """
+  Subscribes a process to membership events.
+  """
+  @spec subscribe(GenServer.server(), pid()) :: :ok
   def subscribe(name, pid) do
     GenServer.call(name, {:subscribe, pid})
   end
 
+  @doc """
+  Unsubscribes a process from membership events.
+  """
+  @spec unsubscribe(GenServer.server(), pid()) :: :ok
   def unsubscribe(name, pid) do
     GenServer.call(name, {:unsubscribe, pid})
   end
 
+  @doc """
+  Notifies the cluster that this node is leaving and stops the process.
+  """
+  @spec leave(GenServer.server()) :: :ok
   def leave(name) do
     GenServer.call(name, :leave, 10_000)
   end

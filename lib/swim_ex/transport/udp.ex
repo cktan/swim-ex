@@ -16,11 +16,19 @@ defmodule SwimEx.Transport.UDP do
 
   # --- Public API ---
 
+  @doc """
+  Starts the UDP transport.
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
   @impl SwimEx.Transport
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: opts[:transport_name])
   end
 
+  @doc """
+  Sends data to a node.
+  """
+  @spec send(GenServer.server(), SwimEx.Transport.node_id() | {String.t(), :inet.port_number(), String.t()}, binary()) :: :ok
   @impl SwimEx.Transport
   def send(server, {host, port, _cookie}, data), do: send(server, {host, port}, data)
 
@@ -30,11 +38,19 @@ defmodule SwimEx.Transport.UDP do
     :ok
   end
 
+  @doc """
+  Sets the receiver process for incoming SWIM packets.
+  """
+  @spec set_receiver(GenServer.server(), pid()) :: :ok
   @impl SwimEx.Transport
   def set_receiver(server, pid) do
     GenServer.call(server, {:set_receiver, pid})
   end
 
+  @doc """
+  Closes the transport socket.
+  """
+  @spec close(GenServer.server()) :: :ok
   @impl SwimEx.Transport
   def close(server) do
     GenServer.call(server, :close)

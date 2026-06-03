@@ -28,14 +28,28 @@ defmodule SwimEx.Membership do
   @type t :: %__MODULE__{members: %{node_id() => member()}}
   defstruct members: %{}
 
+  @doc """
+  Returns a new, empty membership state.
+  """
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
+  @doc """
+  Adds a new node to the membership state with the given incarnation.
+
+  Returns the updated membership state.
+  """
   @spec add(t(), node_id(), non_neg_integer()) :: t()
   def add(%__MODULE__{} = state, node, incarnation) do
     put_member(state, node, :alive, incarnation)
   end
 
+  @doc """
+  Applies a gossip event to the membership state.
+
+  Follows SWIM+Suspension rules for state transitions and incarnation numbers.
+  Returns the updated membership state.
+  """
   @spec apply_event(t(), SwimEx.Codec.event()) :: t()
   def apply_event(%__MODULE__{} = state, {status, node, inc}) do
     node =
@@ -89,6 +103,11 @@ defmodule SwimEx.Membership do
     end
   end
 
+  @doc """
+  Garbage collects dead members that have been dead for longer than `expiry_ms`.
+
+  Returns the updated membership state.
+  """
   @spec gc(t(), non_neg_integer()) :: t()
   def gc(%__MODULE__{} = state, expiry_ms) do
     now = System.monotonic_time(:millisecond)
@@ -102,11 +121,19 @@ defmodule SwimEx.Membership do
     %{state | members: members}
   end
 
+  @doc """
+  Marks a node as alive with the given incarnation.
+
+  Returns the updated membership state.
+  """
   @spec set_alive(t(), node_id(), non_neg_integer()) :: t()
   def set_alive(%__MODULE__{} = state, node, incarnation) do
     put_member(state, node, :alive, incarnation)
   end
 
+  @doc """
+  Returns the membership entry for a node, or nil if not found.
+  """
   @spec get(t(), node_id()) :: member() | nil
   def get(%__MODULE__{} = state, node) do
     node =
@@ -118,11 +145,23 @@ defmodule SwimEx.Membership do
     Map.get(state.members, node)
   end
 
+  @doc """
+  Returns the count of non-dead members (alive or suspect).
+  """
   @spec member_count(t()) :: non_neg_integer()
   def member_count(%__MODULE__{} = state) do
     Enum.count(state.members, fn {_, m} -> m.status in [:alive, :suspect] end)
   end
 
+  @doc """
+  Lists members in the cluster.
+
+  ## Options
+    - `:include_dead`: Boolean. If true, includes nodes marked as dead. Defaults to `false`.
+
+  ## Returns
+    - A list of member tuples: `{host, port, cookie, status, incarnation}`.
+  """
   @spec list(t(), keyword()) :: [{String.t(), :inet.port_number(), String.t(), status(), non_neg_integer()}]
   def list(%__MODULE__{} = state, opts \\ []) do
     include_dead = Keyword.get(opts, :include_dead, false)
