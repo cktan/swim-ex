@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 23 :: Scale test: High Latency Jitter and Delay Stress scenario
+**Decision:** fixed — 2026-06-03
+
+**Problem:** Current network simulation only tests packet loss (where packets disappear) but does not test delay jitter, which can cause false-positive suspect states that need to be refuted.
+
+**Solution:** Implemented '64-node network: high latency jitter and delay stress' in scale_test.exs, simulating network latency jitter by giving nodes a heterogeneous delay of 0ms to 24ms, and successfully verified cluster convergence.
+
+---
+
+
 ## ISSUE 22 :: Scale test: Rolling Upgrade / Redeployment simulation
 **Decision:** fixed — 2026-06-03
 
