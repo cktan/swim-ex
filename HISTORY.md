@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 16 :: scale_test: assert graceful leave/1 is detected faster than suspicion timeout
+**Decision:** fixed — 2026-06-03
+
+**Problem:** All failure detection in scale_test uses GenServer.stop (hard kill), which goes through the full suspicion → dead cycle. The leave/1 path broadcasts a dead announcement directly to peers and should be detected well under one suspicion timeout.
+
+**Solution:** Added a graceful leave test phase at the end of the 64-node network scale test. The test phase invokes SwimEx.Protocol.leave(node.n) on one of the nodes and asserts that all remaining nodes see it as dead within @t * 5 (200ms) rather than waiting for a full suspicion timeout.
+
+---
+
+
 ## ISSUE 15 :: Missing terminate/2 in SwimEx.Transport.UDP leaves socket unclosed on shutdown
 **Decision:** Add terminate/2 to close UDP socket — 2026-06-03
 

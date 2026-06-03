@@ -152,6 +152,23 @@ defmodule SwimEx.ScaleTest do
       end)
     end)
     assert result == :ok, "node_14 did not rejoin successfully"
+
+    # Graceful leave node 14
+    IO.puts("Testing graceful leave on node_14...")
+    SwimEx.Protocol.leave(node_14.n)
+    remaining_after_leave = List.delete(remaining_nodes, node_14)
+
+    result = wait_for(@t * 5, fn ->
+      Enum.all?(remaining_after_leave, fn node ->
+        members = SwimEx.Protocol.members(node.n, include_dead: true)
+        entry = Enum.find(members, fn {h, _, _, _, _} -> h == "node_14" end)
+        entry != nil and elem(entry, 3) == :dead
+      end)
+    end)
+    assert result == :ok, "node_14 graceful leave was not recognized as dead within deadline"
+
+    # Clean up node 14 transport
+    GenServer.stop(node_14.t_pid)
   end
 
   @tag timeout: 120_000
