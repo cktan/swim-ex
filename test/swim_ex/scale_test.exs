@@ -146,6 +146,17 @@ defmodule SwimEx.ScaleTest do
       Process.exit(pid, :kill)
     end)
 
+    # Wait for node_7 dead entry to be garbage collected after dead_node_expiry (@t * 40 = 1600ms)
+    # We use a budget of @t * 50 (2000ms) to allow periodic GC to execute
+    result = wait_for(@t * 50, fn ->
+      Enum.all?(remaining_nodes, fn node ->
+        members = SwimEx.Protocol.members(node.n, include_dead: true)
+        entry = Enum.find(members, fn {h, _, _, _, _} -> h == "node_7" end)
+        entry == nil
+      end)
+    end)
+    assert result == :ok, "node_7 dead entry was not garbage collected after dead_node_expiry"
+
     # Pause node 14
     node_14 = Enum.find(all_nodes, fn n -> n.host == "node_14" end)
     InMemory.set_fault(node_14.t, packet_loss: 1.0)

@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 18 :: scale_test: assert dead node GC after dead_node_expiry
+**Decision:** fixed — 2026-06-03
+
+**Problem:** dead_node_expiry is configured in the scale test suite (@t * 40 = 1600ms) but never asserted. A bug in gc_dead_members would go undetected — dead entries could accumulate indefinitely.
+
+**Solution:** Added an assertion to the 64-node staged startup test that waits for dead_node_expiry (@t * 40) plus a small buffer, then verifies node_7 is no longer present in any peer's membership list even with include_dead: true.
+
+---
+
+
 ## ISSUE 17 :: scale_test: verify subscriber event delivery at scale
 **Decision:** fixed — 2026-06-03
 
