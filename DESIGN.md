@@ -1,7 +1,5 @@
 # swim_ex — Design Specification
 
-All decisions below are locked. See `t` for the original
-questionnaire. Changes require explicit revision here first.
 
 ---
 
