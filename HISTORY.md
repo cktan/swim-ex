@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 24 :: Scale test: Bootstrap Storm simulation
+**Decision:** fixed — 2026-06-03
+
+**Problem:** Simultaneous cold boots of a large number of nodes against a single seed node can cause process mailbox bottlenecks or race conditions.
+
+**Solution:** Added '64-node network: bootstrap storm simulation' to scale_test.exs, using Task.async_stream to simultaneously boot and query the seed node from 63 client processes, verifying that the seed node handles the concurrent requests and the cluster successfully converges.
+
+---
+
+
 ## ISSUE 23 :: Scale test: High Latency Jitter and Delay Stress scenario
 **Decision:** fixed — 2026-06-03
 
