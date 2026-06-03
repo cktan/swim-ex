@@ -560,6 +560,61 @@ defmodule SwimEx.ScaleTest do
     assert result == :ok, "re-convergence failed after staged half-cluster restart"
   end
 
+  @tag timeout: 120_000
+  test "64-node network: rolling upgrade simulation", %{net: net} do
+    seed_a = {"roll_node_1", 2300}
+    seed_b = {"roll_node_33", 2300}
+    seeds = [seed_a, seed_b]
+
+    # Start all 64 nodes with incarnation 1
+    nodes = for i <- 1..64 do
+      opts = case i do
+        1 -> [incarnation: 1, seeds: [seed_b]]
+        33 -> [incarnation: 1, seeds: [seed_a]]
+        _ -> [incarnation: 1, seeds: seeds]
+      end
+      node_opts(net, "roll_node_#{i}", 2300, opts)
+    end
+
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
+
+    IO.puts("Starting rolling upgrade of 64 nodes in batches of 8...")
+    
+    # We perform rolling upgrade in 8 batches of 8 nodes each
+    nodes =
+      Enum.chunk_every(1..64, 8)
+      |> Enum.reduce(nodes, fn batch_indices, acc_nodes ->
+        # 1. Kill the nodes in the current batch
+        for idx <- batch_indices do
+          n = Enum.at(acc_nodes, idx - 1)
+          GenServer.stop(n.n_pid)
+          GenServer.stop(n.t_pid)
+        end
+
+        # 2. Restart the killed nodes with incarnation 2
+        Enum.reduce(batch_indices, acc_nodes, fn idx, current_nodes ->
+          host = "roll_node_#{idx}"
+          opts = case idx do
+            1 -> [incarnation: 2, seeds: [seed_b]]
+            33 -> [incarnation: 2, seeds: [seed_a]]
+            _ -> [incarnation: 2, seeds: seeds]
+          end
+          
+          new_node = node_opts(net, host, 2300, opts)
+          List.replace_at(current_nodes, idx - 1, new_node)
+        end)
+        |> tap(fn _ ->
+          # Sleep briefly between batches to simulate rolling deployment intervals
+          Process.sleep(@t * 10)
+        end)
+      end)
+
+    IO.puts("Waiting for full convergence after rolling upgrade...")
+    result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "re-convergence failed after rolling upgrade"
+  end
+
   # Event loop for a collector process that subscribes to node protocol events.
   #
   # Forwards any received message to the parent test process, tagging it with the
