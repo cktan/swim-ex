@@ -1,9 +1,13 @@
 ---
 name: sync-docs
-description: Use after code changes to keep project documentation in sync. Updates the project's document md files — every *.md except the issue-tracker-managed HISTORY.md and P0–P3.md (DESIGN.md, README.md, USAGE.md, CLAUDE.md, and others) — to match the current state of the code. Invoke with /sync-docs.
+description: Use after code changes to keep project documentation in
+sync. Updates the project's document md files — every *.md except
+HISTORY.md and P0–P3.md — to match the current state of the
+code. Invoke with /sync-docs.
 ---
 
-You are synchronizing the swim-ex project documentation to match recent code changes.
+You are synchronizing the swim-ex project documentation to match
+recent code changes.
 
 ## Step 1 — Understand what changed
 
