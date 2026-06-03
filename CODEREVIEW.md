@@ -4,17 +4,6 @@ Detailed code review of the `swim-ex` project, focusing on resource management, 
 
 ## 1. Resource Leaks & Memory Management
 
-### [HIGH] Memory Leak in `SwimEx.Protocol` (Pending Requests)
-In `lib/swim_ex/protocol.ex`, the `state.pending` map tracks outgoing pings for timeouts. While `:direct` and `:indirect` pings are correctly managed, relayed pings (from `ping_req`) are leaked if they time out.
-
-**Issue:**
-- `handle_message({:ping_req, ...})` adds an entry `{:relay_to, from, seq}` to `state.pending`.
-- `handle_info({:ping_timeout, seq}, state)` ONLY handles `:direct` pings and leaves others in the map.
-- If no `ack` is received for a relayed ping, the entry remains in `state.pending` indefinitely.
-
-**Recommendation:**
-Update `handle_info({:ping_timeout, seq}, state)` to remove the entry from `state.pending` regardless of its type, or add a specific branch for `{:relay_to, ...}`.
-
 ### [LOW] Socket Resource Management in `SwimEx.Transport.UDP`
 The UDP socket is opened in `init/1` and stored in the GenServer state.
 
