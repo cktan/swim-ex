@@ -47,6 +47,39 @@ Supervisor.start_link(children, strategy: :one_for_one)
 Join is asynchronous. Membership converges in the
 background within a few protocol periods.
 
+### Handle events
+
+Subscribe to membership changes to react when nodes join or leave.
+
+```elixir
+# Subscribe the current process
+SwimEx.subscribe()
+
+# Handle notifications in your process loop
+receive do
+  {:swim, :node_up, {host, port, _cookie}} ->
+    IO.puts("Node joined: #{host}:#{port}")
+
+  {:swim, :node_down, {host, port, _cookie}} ->
+    IO.puts("Node left: #{host}:#{port}")
+end
+```
+
+Alternatively, attach a **Telemetry** handler for global
+logging or metrics:
+
+```elixir
+:telemetry.attach(
+  "my-handler",
+  [:swim, :node, :up],
+  fn _name, _measurements, metadata, _config ->
+    {host, port, _} = metadata.peer
+    IO.puts("Telemetry: Node up #{host}:#{port}")
+  end,
+  nil
+)
+```
+
 ---
 
 ## Configuration
