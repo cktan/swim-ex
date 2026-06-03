@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 22 :: Scale test: Rolling Upgrade / Redeployment simulation
+**Decision:** fixed — 2026-06-03
+
+**Problem:** We do not have a test that validates how the cluster behaves during rolling restarts where nodes boot sequentially with bumped incarnations, which is common in production deployments.
+
+**Solution:** Implemented '64-node network: rolling upgrade simulation' in scale_test.exs, verifying that sequential rolling restarts of nodes in batches of 8 with bumped incarnations successfully re-converge to 64 healthy nodes without permanent partitioning.
+
+---
+
+
 ## ISSUE 21 :: Scale test: Multi-Way Partition and Heal scenario
 **Decision:** fixed — 2026-06-03
 
