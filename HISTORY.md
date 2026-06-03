@@ -4,6 +4,16 @@ Closed issues — fixed or ignored.
 
 ---
 
+## ISSUE 20 :: scale_test: kill half the cluster and restart with new incarnations
+**Decision:** fixed — 2026-06-03
+
+**Problem:** The existing churn test kills only 11/64 nodes and waits for full death detection before restarting, which avoids the interesting race between new alive announcements and stale dead gossip. A half-cluster restart tests: (1) incarnation conflict resolution at scale — 32 nodes simultaneously announcing alive with new incarnations while peers hold dead entries with old incarnations; (2) alive-vs-dead gossip races if nodes restart before death is fully propagated; (3) cluster re-formation when the seed node may be among the dead half.
+
+**Solution:** Added two scale test cases (immediate revival and staged revival) for half-cluster restarts. Both tests kill 32 of 64 nodes (including the seed) and restart them with new (higher) incarnations. The immediate revival test restarts them immediately to test incarnation conflict resolution under a gossip race. The staged revival test waits for death detection before restarting to isolate incarnation revival correctness. Both assert that the cluster successfully re-converges to 64.
+
+---
+
+
 ## ISSUE 19 :: scale_test: asymmetric partition (1 vs 63 nodes)
 **Decision:** fixed — 2026-06-03
 

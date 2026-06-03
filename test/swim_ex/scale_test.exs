@@ -339,6 +339,101 @@ defmodule SwimEx.ScaleTest do
     assert result == :ok, "re-convergence after churn failed"
   end
 
+  @tag timeout: 120_000
+  test "64-node network: half-cluster restart immediately (immediate revival)", %{net: net} do
+    seed_host = "half_churn_node_1"
+    seed_port = 5000
+    seed = {seed_host, seed_port}
+    
+    # Start all 64 nodes with incarnation 1
+    nodes = for i <- 1..64 do
+      opts = if i == 1, do: [incarnation: 1], else: [seeds: [seed], incarnation: 1]
+      node_opts(net, "half_churn_node_#{i}", seed_port, opts)
+    end
+
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
+
+    IO.puts("Killing half the cluster immediately (including seed)...")
+    # Kill nodes 1 to 32 (indices 0 to 31)
+    killed_nodes = Enum.slice(nodes, 0, 32)
+    for n <- killed_nodes do
+      GenServer.stop(n.n_pid)
+      GenServer.stop(n.t_pid)
+    end
+
+    IO.puts("Restarting killed nodes immediately with incarnation 2...")
+    # Restart them immediately with incarnation 2, replacing their records in our tracking list
+    nodes =
+      Enum.map(nodes, fn n ->
+        host_num = String.to_integer(String.replace(n.host, ~r/\D/, ""))
+        if host_num <= 32 do
+          opts = if host_num == 1, do: [incarnation: 2], else: [seeds: [seed], incarnation: 2]
+          node_opts(net, n.host, seed_port, opts)
+        else
+          n
+        end
+      end)
+
+    IO.puts("Waiting for re-convergence after immediate half-cluster restart...")
+    result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "re-convergence failed after immediate half-cluster restart"
+  end
+
+  @tag timeout: 120_000
+  test "64-node network: half-cluster restart after death detection (staged revival)", %{net: net} do
+    seed_host = "half_staged_node_1"
+    seed_port = 5500
+    seed = {seed_host, seed_port}
+
+    # Start all 64 nodes with incarnation 1
+    nodes = for i <- 1..64 do
+      opts = if i == 1, do: [incarnation: 1], else: [seeds: [seed], incarnation: 1]
+      node_opts(net, "half_staged_node_#{i}", seed_port, opts)
+    end
+
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
+
+    IO.puts("Killing half the cluster (including seed)...")
+    # Kill nodes 1 to 32 (indices 0 to 31)
+    killed_nodes = Enum.slice(nodes, 0, 32)
+    for n <- killed_nodes do
+      GenServer.stop(n.n_pid)
+      GenServer.stop(n.t_pid)
+    end
+
+    IO.puts("Waiting for the remaining 32 nodes to detect death...")
+    remaining_nodes = Enum.slice(nodes, 32, 32)
+    result = wait_for(@t * @suspicion_mult * 20, fn ->
+      Enum.all?(remaining_nodes, fn node ->
+        members = SwimEx.Protocol.members(node.n, include_dead: true)
+        Enum.all?(1..32, fn i ->
+          entry = Enum.find(members, fn {h, _, _, _, _} -> h == "half_staged_node_#{i}" end)
+          entry != nil and elem(entry, 3) == :dead
+        end)
+      end)
+    end)
+    assert result == :ok, "dead nodes were not recognized as dead"
+
+    IO.puts("Restarting killed nodes with incarnation 2 after death detection...")
+    # Restart them with incarnation 2, replacing their records in our tracking list
+    nodes =
+      Enum.map(nodes, fn n ->
+        host_num = String.to_integer(String.replace(n.host, ~r/\D/, ""))
+        if host_num <= 32 do
+          opts = if host_num == 1, do: [incarnation: 2], else: [seeds: [seed], incarnation: 2]
+          node_opts(net, n.host, seed_port, opts)
+        else
+          n
+        end
+      end)
+
+    IO.puts("Waiting for re-convergence after staged half-cluster restart...")
+    result = wait_for(@convergence_timeout * 5, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "re-convergence failed after staged half-cluster restart"
+  end
+
   defp loop_collector(parent, host) do
     receive do
       msg ->
