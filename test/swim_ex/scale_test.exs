@@ -314,6 +314,66 @@ defmodule SwimEx.ScaleTest do
   end
 
   @tag timeout: 120_000
+  test "64-node network: 4-way partition and gradual heal", %{net: net} do
+    seed_a = {"m_node_1", 2200}
+    seed_b = {"m_node_33", 2200}
+    seeds = [seed_a, seed_b]
+
+    nodes = for i <- 1..64 do
+      opts = case i do
+        1 -> [seeds: [seed_b]]
+        33 -> [seeds: [seed_a]]
+        _ -> [seeds: seeds]
+      end
+      node_opts(net, "m_node_#{i}", 2200, opts)
+    end
+
+    result = wait_for(@convergence_timeout * 3, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "initial convergence failed"
+
+    # Partition into 4 groups of 16
+    group_a = for i <- 1..16, do: "m_node_#{i}"
+    group_b = for i <- 17..32, do: "m_node_#{i}"
+    group_c = for i <- 33..48, do: "m_node_#{i}"
+    group_d = for i <- 49..64, do: "m_node_#{i}"
+
+    IO.puts("Setting 4-way partition (Groups A, B, C, D)...")
+    Network.set_partitions(net, [group_a, group_b, group_c, group_d])
+
+    # Each group should eventually only see members of its own group
+    IO.puts("Waiting for 4-way split brain to stabilize...")
+    result = wait_for(@t * @suspicion_mult * 25, fn ->
+      Enum.all?(nodes, fn node ->
+        members = SwimEx.Protocol.members(node.n, include_dead: false)
+        length(members) == 15 # only knows 15 others in its group
+      end)
+    end)
+    assert result == :ok, "4-way partition did not stabilize"
+
+    # Heal Groups A and B together, and Groups C and D together
+    IO.puts("Healing Groups A-B and C-D...")
+    Network.set_partitions(net, [group_a ++ group_b, group_c ++ group_d])
+
+    # Wait for the two halves to converge to 32 nodes each
+    result = wait_for(@convergence_timeout * 3, fn ->
+      Enum.all?(nodes, fn node ->
+        members = SwimEx.Protocol.members(node.n, include_dead: false)
+        length(members) == 31 # knows 31 others in its merged group
+      end)
+    end)
+    assert result == :ok, "partial heal A-B and C-D failed"
+
+    # Fully heal all partitions
+    IO.puts("Healing all partitions...")
+    Network.clear_partitions(net)
+
+    # Cluster should merge back to 64
+    result = wait_for(@convergence_timeout * 4, fn -> all_converged?(nodes, 64) end)
+    assert result == :ok, "cluster did not heal after 4-way partition"
+  end
+
+
+  @tag timeout: 120_000
   test "64-node network: asymmetric partition (1 vs 63)", %{net: net} do
     seed = {"ap_node_1", 2500}
     nodes = for i <- 1..64 do
