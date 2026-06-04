@@ -52,6 +52,8 @@ defmodule SwimEx.DisseminationTest do
     n2_id = {"n2", 9001, ""}
     n3_id = {"n3", 9001, ""}
 
+    n3_addr = SwimEx.Transport.strip_cookie(n3_id)
+
     # n1: mock node (original sender)
     n1_transport = :transport_n1_9001
     {:ok, _} = InMemory.start_link(network: net, identity: n1_id, name: n1_transport)
@@ -72,7 +74,7 @@ defmodule SwimEx.DisseminationTest do
     send(GenServer.whereis(n3_node), {:swim_packet, n1_id, ping_data})
 
     # Wait for n3 to apply gossip (it will also send an ack back to n1)
-    assert_receive {:swim_packet, ^n3_id, _}, 100
+    assert_receive {:swim_packet, ^n3_addr, _}, 100
 
     # Ask n3 to relay a ping to n2
     seq = 42
@@ -80,7 +82,7 @@ defmodule SwimEx.DisseminationTest do
     send(GenServer.whereis(n3_node), {:swim_packet, n1_id, req_data})
 
     # n2 should receive a ping from n3, and it should carry the event
-    assert_receive {:swim_packet, ^n3_id, raw}, @ping_timeout * 2
+    assert_receive {:swim_packet, ^n3_addr, raw}, @ping_timeout * 2
     {:ok, {:ping, ^n3_id, _relay_seq, events}} = Codec.decode(raw)
 
     assert event in events, "Relay ping should carry gossip event"
@@ -90,6 +92,8 @@ defmodule SwimEx.DisseminationTest do
     n1_id = {"n1", 9002, ""}
     n2_id = {"n2", 9002, ""}
     n3_id = {"n3", 9002, ""}
+
+    n3_addr = SwimEx.Transport.strip_cookie(n3_id)
 
     # n1: mock node (original sender)
     n1_transport = :transport_n1_9002
@@ -110,7 +114,7 @@ defmodule SwimEx.DisseminationTest do
     send(GenServer.whereis(n3_node), {:swim_packet, n1_id, ping_data})
 
     # Wait for n3 to apply gossip (it will also send an ack back to n1)
-    assert_receive {:swim_packet, ^n3_id, _}, 100
+    assert_receive {:swim_packet, ^n3_addr, _}, 100
 
     # Ask n3 to relay a ping to n2
     seq = 42
@@ -118,7 +122,7 @@ defmodule SwimEx.DisseminationTest do
     send(GenServer.whereis(n3_node), {:swim_packet, n1_id, req_data})
 
     # n2 receives relay ping
-    assert_receive {:swim_packet, ^n3_id, relay_ping_raw}, @ping_timeout * 2
+    assert_receive {:swim_packet, ^n3_addr, relay_ping_raw}, @ping_timeout * 2
     {:ok, {:ping, ^n3_id, relay_seq, _}} = Codec.decode(relay_ping_raw)
 
     # n2 acks back to n3
@@ -126,7 +130,7 @@ defmodule SwimEx.DisseminationTest do
     send(GenServer.whereis(n3_node), {:swim_packet, n2_id, ack_data})
 
     # n1 should receive fwd_ack from n3, and it should carry the event
-    assert_receive {:swim_packet, ^n3_id, fwd_ack_raw}, @ping_timeout * 2
+    assert_receive {:swim_packet, ^n3_addr, fwd_ack_raw}, @ping_timeout * 2
     {:ok, {:fwd_ack, ^n3_id, ^seq, ^n2_id, events}} = Codec.decode(fwd_ack_raw)
 
     assert event in events, "fwd_ack should carry gossip event"

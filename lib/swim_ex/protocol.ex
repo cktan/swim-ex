@@ -706,7 +706,8 @@ defmodule SwimEx.Protocol do
   end
 
   defp transport_send(state, to, data) do
-    state.transport_mod.send(state.transport, to, data)
+    to_addr = SwimEx.Transport.strip_cookie(to)
+    state.transport_mod.send(state.transport, to_addr, data)
   end
 
   defp member_count(state) do

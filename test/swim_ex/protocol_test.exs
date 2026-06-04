@@ -221,6 +221,7 @@ defmodule SwimEx.ProtocolTest do
   test "node refutes dead event about itself", %{net: net} do
     {_t1, n1} = start_node(net, "n1", 9001)
     n1_id = {"n1", 9001, ""}
+    n1_addr = SwimEx.Transport.strip_cookie(n1_id)
 
     # n2: mock node to receive the refutation
     n2_id = {"n2", 9001, ""}
@@ -231,7 +232,7 @@ defmodule SwimEx.ProtocolTest do
     # Ensure n1 knows n2 so it has someone to gossip to
     {:ok, ping_from_n2} = SwimEx.Codec.encode({:ping, n2_id, 1, []})
     send(GenServer.whereis(n1), {:swim_packet, n2_id, ping_from_n2})
-    assert_receive {:swim_packet, ^n1_id, _}, 100
+    assert_receive {:swim_packet, ^n1_addr, _}, 100
 
     # Get n1's current incarnation
     # We can't easily get it from the outside without a subscription or query
@@ -240,7 +241,7 @@ defmodule SwimEx.ProtocolTest do
     {:ok, dead_msg} = SwimEx.Codec.encode({:ping, n2_id, 2, [{:dead, n1_id, high_inc}]})
     send(GenServer.whereis(n1), {:swim_packet, n2_id, dead_msg})
     # drain ack for seq 2
-    assert_receive {:swim_packet, ^n1_id, _}, 100
+    assert_receive {:swim_packet, ^n1_addr, _}, 100
 
     # n1 should refute by sending an alive event with high_inc + 1
     # It will send it in its next ping or ack.
@@ -249,7 +250,7 @@ defmodule SwimEx.ProtocolTest do
     send(GenServer.whereis(n1), {:swim_packet, n2_id, ping2})
 
     expected_inc = high_inc + 1
-    assert_receive {:swim_packet, ^n1_id, raw}, @t * 2
+    assert_receive {:swim_packet, ^n1_addr, raw}, @t * 2
     {:ok, {:ack, ^n1_id, 3, events}} = SwimEx.Codec.decode(raw)
 
     assert Enum.any?(events, fn

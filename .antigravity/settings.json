@@ -1,0 +1,5 @@
+{
+  "allow": [
+    "command(python3 .claude/skills/issue-tracker/scripts/issue.py)"
+  ]
+}

@@ -28,10 +28,7 @@ defmodule SwimEx.Transport.UDP do
   @doc """
   Sends data to a node.
   """
-  @spec send(GenServer.server(), SwimEx.Transport.node_id() | {String.t(), :inet.port_number(), String.t()}, binary()) :: :ok
-  @impl SwimEx.Transport
-  def send(server, {host, port, _cookie}, data), do: send(server, {host, port}, data)
-
+  @spec send(GenServer.server(), SwimEx.Transport.node_id(), binary()) :: :ok
   @impl SwimEx.Transport
   def send(server, {host, port}, data) when is_binary(data) do
     GenServer.cast(server, {:send, host, port, data})

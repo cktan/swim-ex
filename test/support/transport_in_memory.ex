@@ -38,13 +38,9 @@ defmodule SwimEx.Transport.InMemory do
   end
 
   @impl SwimEx.Transport
-  def send(server, {_, _, _} = to, data) when is_binary(data) do
-    GenServer.cast(server, {:send, to, data})
-  end
-
-  @impl SwimEx.Transport
   def send(server, to, data) when is_binary(data) do
-    GenServer.cast(server, {:send, to, data})
+    to_addr = SwimEx.Transport.strip_cookie(to)
+    GenServer.cast(server, {:send, to_addr, data})
   end
 
   @impl SwimEx.Transport
@@ -71,7 +67,7 @@ defmodule SwimEx.Transport.InMemory do
   @impl GenServer
   def init(opts) do
     network = Keyword.fetch!(opts, :network)
-    identity = Keyword.fetch!(opts, :identity)
+    identity = opts |> Keyword.fetch!(:identity) |> SwimEx.Transport.strip_cookie()
     SwimEx.Transport.InMemory.Network.register(network, identity, self())
 
     state = %__MODULE__{
@@ -221,7 +217,6 @@ defmodule SwimEx.Transport.InMemory.Network do
   end
 
   defp allowed?(_from, _to, nil), do: true
-  defp allowed?({f_h, _, _}, {t_h, _, _}, partitions), do: allowed_host?(f_h, t_h, partitions)
   defp allowed?({f_h, _}, {t_h, _}, partitions), do: allowed_host?(f_h, t_h, partitions)
 
   defp allowed_host?(f_h, t_h, partitions) do

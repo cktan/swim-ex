@@ -2,6 +2,8 @@
 
 A SWIM-based membership protocol for Elixir.
 
+See `DESIGN.md` for an overview of the project.
+
 See `MANIFEST.md` for a map of source files and their purposes.
 
 ---
