@@ -10,6 +10,8 @@
 - **License:** MIT
 - **Elixir/OTP floor:** Elixir 1.15 / OTP 26
 - **Source Map:** See `MANIFEST.md` for file responsibilities.
+- **Algorithm:** See `ALGORITHM.md` for the step-by-step
+  protocol; this document covers the design decisions.
 
 ---
 
@@ -22,24 +24,14 @@
 ### Failure detection flow
 
 ```
-A → B        ping(seq)
-# no ack within ping_timeout
-
-A → [C,D,E]  ping_req(seq, target=B)
-C → B        ping(seq, relay_to=A)
-B → C        ack(seq)
-C → A        ack(seq, from=B)
-
-# if still no ack after suspicion_timeout:
-A gossips    suspect(B, inc)
+A → B        ping(seq)              # no ack within ping_timeout
+A → [C,D,E]  ping_req(seq, B)       # indirect probe via k peers
+C → B → C → A                       # B answers, relayed back to A
+# still no ack → A gossips suspect(B), then dead(B) after timeout
 ```
 
-- Relay ack refutes a suspect immediately, even if
-  the suspect timer has already fired.
-- A node that receives `suspect(self, inc)` where
-  `inc >= own_incarnation` auto-refutes: increments
-  incarnation and broadcasts `alive(self, new_inc)`.
-  This is transparent to the caller.
+Relay-ack refutation, self-refutation, and the full
+step detail are in `ALGORITHM.md` (procedures A, B, F).
 
 ---
 
@@ -140,6 +132,10 @@ opts. Defaults are tuned for an 8-node cluster.
 
 ## 8. Dissemination
 
+The packing and expiry flow is specified in
+`ALGORITHM.md` (procedure D); the parameters below are
+the design choices.
+
 - **Transmit multiplier:** `ceil(log₂(N+1)) × 3` where
   `N` = count of alive + suspect nodes. Recalculated
   dynamically as membership changes.
@@ -161,14 +157,10 @@ opts. Defaults are tuned for an 8-node cluster.
 
 ## 9. Membership State Machine
 
-```
-         ping timeout
-alive ──────────────────► suspect
-  ▲                           │
-  │ alive(inc > current)      │ suspicion_timeout
-  │                           ▼
-  └─────────────────────── dead
-```
+The `alive → suspect → dead` transitions and the
+incarnation acceptance rules are specified in
+`ALGORITHM.md` (procedures B and E). This section
+records the design decisions behind them.
 
 - **States:** `:alive`, `:suspect`, `:dead`
 - **Graceful leave:** treated as `:dead`
@@ -199,12 +191,13 @@ alive ──────────────────► suspect
 
 ## 10. Bootstrap / Join
 
+Join and seed handling are specified in `ALGORITHM.md`
+(procedures G and F). Design decisions:
+
 - **Discovery:** caller provides a seed node list.
-- **Self-announcement:** on startup the node enqueues
-  `{:alive, self_id, incarnation}` into its gossip
-  queue (with `refutation_multiplier` transmit slots)
-  so peers learn the node's real incarnation from the
-  first probes it sends.
+- **Self-announcement:** on startup the node gossips
+  its own `alive` so peers learn its real incarnation
+  early.
 - **Seed unreachable:** start as a single-node
   cluster and retry seeds every `seed_retry_interval`
   (default 5000 ms, fixed interval).
@@ -320,12 +313,12 @@ Set on all protocol log lines:
 
 ## 13. Ping Target Selection
 
-Each protocol period, the node picks one peer to
-ping using **round-robin with periodic shuffle**:
-the member list is shuffled when exhausted, then
-iterated in order. This bounds detection latency
-to `(N-1) × T` in the worst case, avoiding the
-unlucky streaks possible with pure random selection.
+The node probes one peer per period using
+**round-robin with periodic shuffle** (see
+`ALGORITHM.md` procedure A1). The design rationale:
+this bounds worst-case detection latency to
+`(N-1) × T`, avoiding the unlucky streaks possible
+with pure random selection.
 
 ---
 
