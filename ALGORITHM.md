@@ -21,6 +21,9 @@ on each received packet:     procedure C  (handle message)
 on user leave call:          procedure H  (announce + stop)
 ```
 
+Local processes can watch membership changes by subscribing
+(procedure I).
+
 The heart is the **probe cycle** (A → B), which detects
 failures. Everything a node learns — about itself or
 others — is spread by **gossip piggybacked on the probe
@@ -163,7 +166,7 @@ events are accepted by these rules:
 
 Whenever an event is *adopted* (it actually changed local
 state), it is re-gossiped (procedure D) and subscribers are
-notified (`node_up` / `node_suspect` / `node_down`).
+notified (procedure I).
 
 **Dead-node retention**: dead entries are kept for
 `dead_node_expiry` to reject stale `alive` rumors, then
@@ -207,3 +210,22 @@ H2. Send `dead(self)` **directly** (not via the gossip
     peers, then stop the process.
 
 For a silent stop, just stop the supervisor instead.
+
+---
+
+## I. Subscribers (membership notifications)
+
+A node lets local processes observe membership changes.
+
+I1. A process calls `subscribe` to register itself (the
+    node monitors it and drops it automatically if it
+    dies); `unsubscribe` removes it.
+
+I2. Whenever a status change is adopted (procedure E), the
+    node sends every subscriber a message
+    `{:swim, event, node_id}`, where `event` is one of
+    `:node_up`, `:node_suspect`, or `:node_down`. The same
+    transitions are also emitted as telemetry.
+
+Subscribers are observers only — they do not influence the
+protocol.
