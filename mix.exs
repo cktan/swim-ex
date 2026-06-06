@@ -11,8 +11,15 @@ defmodule SwimEx.MixProject do
       deps: deps(),
       description: "SWIM+INF+Susp cluster membership library",
       package: package(),
-      name: "swim_ex",
-      docs: [main: "readme", extras: ["README.md"]]
+      name: "SwimEx",
+      source_url: "https://github.com/cktan/swim-ex",
+      homepage_url: "https://hex.pm/packages/swim_ex",
+      docs: [
+        main: "readme",
+        extras: ["README.md"],
+        source_ref: "main",
+        formatters: ["html", "epub"]
+      ]
     ]
   end
 
@@ -37,7 +44,8 @@ defmodule SwimEx.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/cktan/swim-ex"},
-      maintainers: ["CK Tan"]
+      maintainers: ["CK Tan"],
+      files: ~w(lib LICENSE mix.exs README.md)
     ]
   end
 end
