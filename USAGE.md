@@ -23,23 +23,15 @@ end
 
 Add `SwimEx.Supervisor` to your application's supervision
 tree. The first node starts alone; subsequent nodes join
-by pointing at a known seed.
+by pointing at one or more known seeds.
 
 ```elixir
-# Node 1 (first node, no seeds)
+# Node 7, join via seeds at 10.0.0.1 and 10.0.0.2 
 children = [
   {SwimEx.Supervisor,
-   host: "10.0.0.1",
-   port: 7771}
-]
-Supervisor.start_link(children, strategy: :one_for_one)
-
-# Node 2 (joins — all seeds pinged until no longer alone)
-children = [
-  {SwimEx.Supervisor,
-   host: "10.0.0.2",
+   host: "10.0.0.7",
    port: 7771,
-   seeds: [{"10.0.0.1", 7771}, {"10.0.0.3", 7771}]}
+   seeds:[{"10.0.0.1", 7771}, {"10.0.0.2", 7771}]}
 ]
 Supervisor.start_link(children, strategy: :one_for_one)
 ```

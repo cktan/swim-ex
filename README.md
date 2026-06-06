@@ -123,9 +123,9 @@ production. Bug reports and pull requests welcome.
 
 ## Documentation
 
-- **[USAGE.md](USAGE.md)** — installation, configuration
+- **USAGE.md** — installation, configuration
   reference, API, telemetry, and testing guide
-- **[DESIGN.md](DESIGN.md)** — full design decisions and
+- **DESIGN.md** — full design decisions and
   rationale, including every tradeoff answered before
   the first line of code was written
 
@@ -133,4 +133,4 @@ production. Bug reports and pull requests welcome.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/cktan/swim-ex/blob/main/LICENSE)
