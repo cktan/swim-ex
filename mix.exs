@@ -16,7 +16,7 @@ defmodule SwimEx.MixProject do
       homepage_url: "https://hex.pm/packages/swim_ex",
       docs: [
         main: "readme",
-        extras: ["README.md"],
+        extras: ["README.md", "DESIGN.md", "ALGORITHM.md", "USAGE.md", "LICENSE"],
         source_ref: "main",
         formatters: ["html", "epub"]
       ]
@@ -45,7 +45,7 @@ defmodule SwimEx.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/cktan/swim-ex"},
       maintainers: ["CK Tan"],
-      files: ~w(lib LICENSE mix.exs README.md)
+      files: ~w(lib LICENSE mix.exs README.md ALGORITHM.md USAGE.md DESIGN.md)
     ]
   end
 end

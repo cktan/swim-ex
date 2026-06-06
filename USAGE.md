@@ -47,6 +47,16 @@ Supervisor.start_link(children, strategy: :one_for_one)
 Join is asynchronous. Membership converges in the
 background within a few protocol periods.
 
+
+## Node identity
+
+Each node is identified by a 3-tuple `{host, port, cookie}`.
+`host` and `port` are required. `cookie` is a user-defined
+string (default `""`) that can be used to logically
+distinguish clusters sharing the same network.
+
+---
+
 ### Handle events
 
 Subscribe to membership changes to react when nodes join or leave.
@@ -120,8 +130,13 @@ n = 50
 
 ## API
 
-All functions accept an optional `name` argument (default
-`:swim`) to address a named instance.
+These functions accept an optional `name` argument (default
+`:swim`) to address a named instance:
+
+- `SwimEx.members/0,1,2`
+- `SwimEx.subscribe/0,1`
+- `SwimEx.unsubscribe/0,1`
+- `SwimEx.leave/0,1`
 
 ### Query membership
 
@@ -265,30 +280,6 @@ to expose these fields in structured logs.
 
 ---
 
-## Failure detection flow
-
-```
-Every protocol_period ms:
-  Pick one peer (round-robin, shuffled each cycle)
-  Send ping(seq) → wait ping_timeout ms
-    ↓ ack received        → peer stays :alive
-    ↓ no ack (timeout)
-  Send ping_req to k relays → wait ping_timeout ms
-    ↓ fwd_ack received    → peer stays :alive
-    ↓ no ack (timeout)
-  Gossip suspect(peer, inc)
-  Start suspicion timer (suspicion_timeout ms)
-    ↓ alive(inc > current) received → cancel, stays :alive
-    ↓ timer fires
-  Gossip dead(peer, inc)
-```
-
-A suspected node that receives the suspect gossip
-automatically refutes it: it increments its own
-incarnation and broadcasts `alive(self, new_inc)`.
-
----
-
 ## Node identity and restarts
 
 A node is identified by `{host, port, cookie}`. Identity
@@ -311,73 +302,5 @@ higher than any incarnation from the prior run.
 
 ## Testing
 
-Use `SwimEx.Transport.InMemory` (in `test/support/`) to
-run multi-node scenarios in a single BEAM without real
-sockets. It supports fault injection for protocol
-correctness tests.
-
-```elixir
-alias SwimEx.Transport.InMemory
-alias SwimEx.Transport.InMemory.Network
-
-setup do
-  {:ok, net} = Network.start_link()
-  %{net: net}
-end
-
-test "two nodes converge", %{net: net} do
-  {:ok, t1} = InMemory.start_link(network: net,
-                identity: {"n1", 7771}, name: :t1)
-  {:ok, _}  = SwimEx.Protocol.start_link(
-                host: "n1", port: 7771, name: :n1,
-                transport: :t1,
-                transport_mod: InMemory,
-                protocol_period: 30,
-                ping_timeout: 15,
-                suspicion_timeout: 90,
-                seed_retry_interval: 150,
-                dead_node_expiry: 300)
-
-  {:ok, t2} = InMemory.start_link(network: net,
-                identity: {"n2", 7771}, name: :t2)
-  {:ok, _}  = SwimEx.Protocol.start_link(
-                host: "n2", port: 7771, name: :n2,
-                transport: :t2,
-                transport_mod: InMemory,
-                protocol_period: 30,
-                ping_timeout: 15,
-                suspicion_timeout: 90,
-                seed_retry_interval: 150,
-                dead_node_expiry: 300,
-                seeds: [{"n1", 7771}])
-
-  Process.sleep(300)
-  assert [{"n2", 7771, "", :alive, _}] = SwimEx.Protocol.members(:n1, [])
-end
-```
-
-### Fault injection
-
-```elixir
-# Drop all outbound packets from t2 (simulate crash)
-InMemory.set_fault(t2, packet_loss: 1.0)
-
-# Add 50ms delivery delay
-InMemory.set_fault(t2, delay_ms: 50)
-
-# Restore normal operation
-InMemory.set_fault(t2, packet_loss: 0.0, delay_ms: 0)
-```
-
----
-
-## Non-goals
-
-swim_ex intentionally does not provide:
-
-- Data replication or CRDTs
-- Leader election or distributed locking
-- Service discovery beyond cluster membership
-- Reliable message delivery
-- Cross-datacenter topology awareness
-- Polyglot wire compatibility (ETF only)
+For multi-node testing without real sockets and fault
+injection, see [TESTING.md](TESTING.md).
