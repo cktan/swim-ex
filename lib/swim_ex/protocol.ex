@@ -699,7 +699,7 @@ defmodule SwimEx.Protocol do
 
     :telemetry.execute(telemetry_event, %{}, %{node: state.self_id, peer: node})
 
-    Logger.log(log_level, "membership change: #{event}",
+    Logger.log(log_level, "membership change: #{event} #{inspect(node)}",
       swim_node: state.self_id,
       swim_peer: node,
       swim_event: event
