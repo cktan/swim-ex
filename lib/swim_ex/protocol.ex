@@ -107,6 +107,15 @@ defmodule SwimEx.Protocol do
     GenServer.call(name, :leave, 10_000)
   end
 
+  @doc """
+  Records out-of-band evidence that `node` is alive,
+  equivalent to having received a SWIM ack from it.
+  """
+  @spec hint_alive(GenServer.server(), Membership.node_id()) :: :ok
+  def hint_alive(name, node) do
+    GenServer.cast(name, {:hint_alive, node})
+  end
+
   # --- GenServer callbacks ---
 
   @impl GenServer
@@ -177,6 +186,11 @@ defmodule SwimEx.Protocol do
     state = %{state | incarnation: dead_inc}
     broadcast_dead_self(state)
     {:stop, :normal, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_cast({:hint_alive, node}, state) do
+    {:noreply, update_node_alive(node, state)}
   end
 
   @impl GenServer

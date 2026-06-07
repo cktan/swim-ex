@@ -257,6 +257,35 @@ The library monitors each subscriber via
 `Process.monitor/1` and removes it automatically
 on `:DOWN`.
 
+### Liveness hint
+
+```elixir
+SwimEx.hint_alive(name \\ :swim, peer)
+```
+
+Feeds out-of-band evidence that `peer` is alive into the
+failure detector — semantically equivalent to having
+received a SWIM ack from it. Intended for applications
+that already communicate with peers over another channel
+(e.g. an HTTP request *from* `peer`) and want that
+first-hand reachability signal to suppress false-positive
+suspicion. SWIM probes run over UDP; this lets a
+successful exchange over TCP count as liveness evidence.
+
+Semantics — local and advisory:
+
+- If `peer` is `:suspect`, its suspicion timer is
+  cancelled and an `alive` event is re-disseminated, so
+  this node will not declare `peer` dead.
+- If `peer` is already `:alive`, the call is a no-op.
+- A `:dead` `peer` is not revived — revival requires a
+  higher incarnation from the peer itself (see §9).
+
+It cannot override a same-incarnation `suspect` already
+circulating elsewhere; only the peer's own self-refutation
+(a higher incarnation) is authoritative cluster-wide. The
+call is asynchronous (cast) and never blocks the caller.
+
 ### Graceful leave
 
 ```elixir

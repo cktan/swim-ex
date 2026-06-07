@@ -259,6 +259,29 @@ defmodule SwimEx.ProtocolTest do
            end)
   end
 
+  test "hint_alive clears local suspicion of a peer", %{net: net} do
+    {_ta, na} = start_node(net, "n1", 7008)
+    {tb, _nb} = start_node(net, "n2", 7008, seeds: [{"n1", 7008}])
+
+    Process.sleep(@t * 6)
+    SwimEx.Protocol.subscribe(na, self())
+
+    # Cut n2's traffic so n1 suspects it
+    InMemory.set_fault(tb, packet_loss: 1.0)
+    assert_receive {:swim, :node_suspect, {"n2", 7008, ""}}, @t * 10
+
+    # Out-of-band evidence that n2 is alive (e.g. an HTTP request from it)
+    SwimEx.Protocol.hint_alive(na, {"n2", 7008, ""})
+
+    # n1 restores n2 to alive locally despite the dropped probes
+    assert_receive {:swim, :node_up, {"n2", 7008, ""}}, @t * 4
+
+    assert Enum.any?(SwimEx.Protocol.members(na, []), fn {h, p, _, s, _} ->
+             h == "n2" and p == 7008 and s == :alive
+           end),
+           "n2 should be alive after hint, got: #{inspect(SwimEx.Protocol.members(na, []))}"
+  end
+
   test "alive gossip for GC'd node gets refutation multiplier", %{net: net} do
     {_t, name} = start_node(net, "n1", 9010)
     pid = GenServer.whereis(name)

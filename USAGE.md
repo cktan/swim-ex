@@ -88,6 +88,7 @@ All functions accept an optional `name` argument (default
 - `SwimEx.members/0,1,2`
 - `SwimEx.subscribe/0,1`
 - `SwimEx.unsubscribe/0,1`
+- `SwimEx.hint_alive/1,2`
 - `SwimEx.leave/0,1`
 
 ### Query membership
@@ -156,6 +157,37 @@ process, attach a [Telemetry handler](#observability) instead.
 > notification of this crash (other than via their own monitors).
 > Subscribers should monitor the `Protocol` process and re-subscribe
 > if it restarts to continue receiving events.
+
+### Hint that a node is alive
+
+```elixir
+SwimEx.hint_alive({"10.0.0.2", 7771, "c1"})
+SwimEx.hint_alive(:my_cluster, {"10.0.0.2", 7771, "c1"})
+```
+
+When your application already talks to peers over another
+channel — say node A makes an HTTP request to node B —
+that exchange is first-hand proof the peer is reachable.
+`hint_alive/1,2` feeds that evidence into the failure
+detector, exactly as if a SWIM ack had arrived. Because
+SWIM probes run over UDP, a successful TCP exchange is
+independent evidence that can suppress a false-positive
+suspicion.
+
+The hint is asynchronous and advisory:
+
+- A **suspected** peer is restored to alive locally, its
+  suspicion timer cancelled, and an `alive` event
+  re-gossiped — so this node won't declare it dead.
+- An **alive** peer: no-op.
+- A **dead** peer is not revived; revival requires a
+  higher incarnation from the peer itself.
+
+It cannot overturn a suspicion already circulating from
+other nodes at the same incarnation — only the peer's own
+self-refutation does that. Use it to stop *this* node from
+contributing false positives when you have better
+information.
 
 ### Graceful leave
 

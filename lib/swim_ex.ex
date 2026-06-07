@@ -102,4 +102,44 @@ defmodule SwimEx do
   def leave(name \\ @default_name) do
     SwimEx.Protocol.leave(name)
   end
+
+  @doc """
+  Records out-of-band evidence that `peer` is alive.
+
+  Use this when the application has direct, first-hand
+  proof that a peer is reachable — for example a
+  successful HTTP request received from it — that the
+  SWIM failure detector may not have observed. SWIM
+  probes run over UDP; this lets a successful exchange
+  over another channel (e.g. TCP) count as liveness
+  evidence and suppress false-positive suspicion.
+
+  The hint is asynchronous and advisory, applied to the
+  local view only:
+
+    * If `peer` is currently suspected, its suspicion
+      timer is cancelled and an `alive` event is
+      re-disseminated, so this node will not declare
+      `peer` dead.
+    * If `peer` is already alive, the call is a no-op.
+    * A dead `peer` is **not** revived — that requires a
+      higher incarnation from the peer itself.
+
+  It cannot override a same-incarnation suspicion already
+  circulating elsewhere in the cluster; only the peer's
+  own self-refutation is authoritative cluster-wide.
+
+  ## Parameters
+    - `name`: (optional) The registered name of the
+      SwimEx instance. Defaults to `:swim`.
+    - `peer`: The `{host, port, cookie}` of the peer
+      known to be alive.
+
+  ## Returns
+    - `:ok`
+  """
+  @spec hint_alive(atom(), SwimEx.Membership.node_id()) :: :ok
+  def hint_alive(name \\ @default_name, peer) do
+    SwimEx.Protocol.hint_alive(name, peer)
+  end
 end
