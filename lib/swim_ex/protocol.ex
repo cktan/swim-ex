@@ -190,6 +190,7 @@ defmodule SwimEx.Protocol do
 
   @impl GenServer
   def handle_cast({:hint_alive, node}, state) do
+    state = cancel_probes(node, state)
     {:noreply, update_node_alive(node, state)}
   end
 
@@ -499,6 +500,28 @@ defmodule SwimEx.Protocol do
 
         %{state | pending: pending}
     end
+  end
+
+  # Abandon any in-flight probe of `node` that this node originated
+  # (direct or indirect), so a probe already doomed to time out cannot
+  # re-suspect `node` moments after a liveness hint. Relay probes
+  # (`{:relay_to, ...}`) are left running: they belong to another node's
+  # failure detector, never trigger suspicion here, and dropping one
+  # would only deny that node a confirmation path.
+  defp cancel_probes(node, state) do
+    Enum.reduce(state.pending, state, fn
+      {seq, {^node, ref, kind}}, acc when kind in [:direct, :indirect] ->
+        Process.cancel_timer(ref)
+
+        %{
+          acc
+          | pending: Map.delete(acc.pending, seq),
+            ping_times: Map.delete(acc.ping_times, seq)
+        }
+
+      _, acc ->
+        acc
+    end)
   end
 
   # --- Membership updates ---

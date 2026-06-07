@@ -121,9 +121,14 @@ defmodule SwimEx do
       timer is cancelled and an `alive` event is
       re-disseminated, so this node will not declare
       `peer` dead.
-    * If `peer` is already alive, the call is a no-op.
+    * If `peer` is already alive, there is no membership
+      change.
     * A dead `peer` is **not** revived — that requires a
       higher incarnation from the peer itself.
+    * Any in-flight probe this node has outstanding to
+      `peer` is cancelled, so a probe already doomed to
+      time out cannot re-suspect `peer` right after the
+      hint.
 
   It cannot override a same-incarnation suspicion already
   circulating elsewhere in the cluster; only the peer's

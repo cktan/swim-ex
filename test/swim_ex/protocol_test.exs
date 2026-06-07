@@ -282,6 +282,45 @@ defmodule SwimEx.ProtocolTest do
            "n2 should be alive after hint, got: #{inspect(SwimEx.Protocol.members(na, []))}"
   end
 
+  test "hint_alive cancels own in-flight probe but preserves relay probe", %{net: net} do
+    # Large ping_timeout so in-flight probes stay pending long enough to inspect.
+    {_t, na} = start_node(net, "n1", 7009, ping_timeout: 5000)
+    pid = GenServer.whereis(na)
+
+    xid = {"x", 7009, ""}
+    yid = {"y", 7009, ""}
+
+    # na learns x is alive, so its protocol period will probe x
+    {:ok, ping_x} = SwimEx.Codec.encode({:ping, xid, 1, []})
+    send(pid, {:swim_packet, xid, ping_x})
+
+    # y asks na to relay a ping to x -> creates a {:relay_to, ...} pending to x
+    {:ok, req} = SwimEx.Codec.encode({:ping_req, yid, 99, xid, []})
+    send(pid, {:swim_packet, yid, req})
+
+    # let a protocol period fire so na sends its own probe to x
+    Process.sleep(@t * 2)
+
+    own_probe? = fn pending ->
+      Enum.any?(pending, fn {_seq, {t, _ref, k}} -> t == xid and k in [:direct, :indirect] end)
+    end
+
+    relay_probe? = fn pending ->
+      Enum.any?(pending, fn {_seq, {t, _ref, k}} -> t == xid and match?({:relay_to, _, _}, k) end)
+    end
+
+    state0 = :sys.get_state(pid)
+    assert own_probe?.(state0.pending), "expected an in-flight direct probe to x"
+    assert relay_probe?.(state0.pending), "expected a relay probe to x"
+
+    SwimEx.Protocol.hint_alive(na, xid)
+    :sys.get_state(pid)
+
+    state1 = :sys.get_state(pid)
+    refute own_probe?.(state1.pending), "hint_alive should cancel this node's own probe of x"
+    assert relay_probe?.(state1.pending), "hint_alive must NOT cancel a relay probe to x"
+  end
+
   test "alive gossip for GC'd node gets refutation multiplier", %{net: net} do
     {_t, name} = start_node(net, "n1", 9010)
     pid = GenServer.whereis(name)

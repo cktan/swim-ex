@@ -277,9 +277,18 @@ Semantics — local and advisory:
 - If `peer` is `:suspect`, its suspicion timer is
   cancelled and an `alive` event is re-disseminated, so
   this node will not declare `peer` dead.
-- If `peer` is already `:alive`, the call is a no-op.
+- If `peer` is already `:alive`, there is no membership
+  change.
 - A `:dead` `peer` is not revived — revival requires a
   higher incarnation from the peer itself (see §9).
+- In all cases, any in-flight *direct or indirect* probe
+  this node has outstanding to `peer` is cancelled, so a
+  probe already doomed to time out cannot re-suspect
+  `peer` (and gossip false `suspect`) moments after the
+  hint. Relay probes (`ping_req` work performed for
+  another node) are left untouched — they never trigger
+  suspicion here, and dropping one would only deny that
+  node a confirmation path.
 
 It cannot override a same-incarnation `suspect` already
 circulating elsewhere; only the peer's own self-refutation

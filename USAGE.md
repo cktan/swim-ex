@@ -179,9 +179,12 @@ The hint is asynchronous and advisory:
 - A **suspected** peer is restored to alive locally, its
   suspicion timer cancelled, and an `alive` event
   re-gossiped — so this node won't declare it dead.
-- An **alive** peer: no-op.
+- An **alive** peer: no membership change.
 - A **dead** peer is not revived; revival requires a
   higher incarnation from the peer itself.
+- Either way, an in-flight probe this node has to the
+  peer is cancelled, so a probe about to time out can't
+  re-suspect it right after the hint.
 
 It cannot overturn a suspicion already circulating from
 other nodes at the same incarnation — only the peer's own
