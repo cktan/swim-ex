@@ -4,6 +4,17 @@ swim_ex implements the SWIM+INF+Susp cluster membership
 protocol. Nodes discover each other, detect failures, and
 propagate membership changes via gossip over UDP.
 
+## Contents
+
+1. [Installation](#installation)
+2. [Quick Start](#quick-start)
+3. [Node Identity](#node-identity)
+4. [API Reference](#api-reference)
+5. [Configuration](#configuration)
+6. [Multiple Instances](#multiple-instances)
+7. [Observability](#observability)
+8. [Testing](#testing)
+
 ---
 
 ## Installation
@@ -39,91 +50,40 @@ Supervisor.start_link(children, strategy: :one_for_one)
 Join is asynchronous. Membership converges in the
 background within a few protocol periods.
 
+Once running, [query the membership](#query-membership) or
+[subscribe to changes](#subscribe-to-events).
 
-## Node identity
+---
+
+## Node Identity
 
 Each node is identified by a 3-tuple `{host, port, cookie}`.
 `host` and `port` are required. `cookie` is a user-defined
 string (default `""`) that can be used to logically
-distinguish clusters sharing the same network.
+distinguish clusters sharing the same network. A different
+cookie on the same address is treated as a distinct node.
+
+Identity is **stable across restarts** — the same tuple
+reconnects as the same logical node. Stale dead events from
+a previous incarnation are rejected because the restarted
+node seeds its incarnation number from
+`System.system_time(:millisecond)`, which is always higher
+than any incarnation from the prior run.
+
+> **NTP caveat:** if the system clock steps backward
+> (NTP correction) between a crash and restart, the
+> node's new incarnation may be lower than the stale
+> dead event. Membership recovery is delayed until the
+> clock overtakes the old value. Use NTP with `makestep`
+> rather than slewing to minimise this window.
 
 ---
 
-### Handle events
+## API Reference
 
-Subscribe to membership changes to react when nodes join or leave.
-
-```elixir
-# Subscribe the current process
-SwimEx.subscribe()
-
-# Handle notifications in your process loop
-receive do
-  {:swim, :node_up, {host, port, _cookie}} ->
-    IO.puts("Node joined: #{host}:#{port}")
-
-  {:swim, :node_down, {host, port, _cookie}} ->
-    IO.puts("Node left: #{host}:#{port}")
-end
-```
-
-Alternatively, attach a **Telemetry** handler for global
-logging or metrics:
-
-```elixir
-:telemetry.attach(
-  "my-handler",
-  [:swim, :node, :up],
-  fn _name, _measurements, metadata, _config ->
-    {host, port, _} = metadata.peer
-    IO.puts("Telemetry: Node up #{host}:#{port}")
-  end,
-  nil
-)
-```
-
----
-
-## Configuration
-
-All options are passed to `SwimEx.Supervisor.start_link/1`.
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `:host` | `String.t()` | **required** | This node's hostname or IP |
-| `:port` | `integer` | (req) | UDP port to bind |
-| `:cookie` | `string` | `""` | User-defined node cookie |
-| `:name` | `atom` | `:swim` | Instance name (for multi-cluster) |
-
-| `:seeds` | `[{host, port} \| {host, port, cookie}]` | `[]` | Seed nodes for join |
-| `:protocol_period` | `ms` | `1000` | How often to probe one peer |
-| `:ping_timeout` | `ms` | `200` | Direct ack wait time |
-| `:ping_req_fanout` | `integer` | `3` | Indirect ping relay count |
-| `:suspicion_timeout` | `ms` | `3000` | Suspect → dead delay |
-| `:seed_retry_interval` | `ms` | `5000` | Retry interval if no peers |
-| `:dead_node_expiry` | `ms` | `6000` | How long to keep dead entries |
-
-### Tuning for cluster size
-
-The defaults target an 8-node cluster. For larger
-clusters, scale timeouts with `log2(N)`:
-
-```elixir
-n = 50
-{SwimEx.Supervisor,
- host: "10.0.0.1",
- port: 7771,
- protocol_period: 1000,
- suspicion_timeout: ceil(:math.log2(n + 1)) * 1000,
- dead_node_expiry:  ceil(:math.log2(n + 1)) * 2000}
-```
-
----
-
-## API
-
-These functions accept an optional `name` argument (default
-`:swim`) to address a named instance:
+All functions accept an optional `name` argument (default
+`:swim`) to address a named instance (see
+[Multiple Instances](#multiple-instances)):
 
 - `SwimEx.members/0,1,2`
 - `SwimEx.subscribe/0,1`
@@ -153,6 +113,9 @@ node's current incarnation number.
 
 ### Subscribe to events
 
+Subscribe to membership changes to react when nodes join,
+are suspected, or leave.
+
 ```elixir
 SwimEx.subscribe()      # registers self()
 SwimEx.unsubscribe()    # deregisters self()
@@ -161,7 +124,7 @@ SwimEx.unsubscribe()    # deregisters self()
 SwimEx.subscribe(:my_cluster)
 ```
 
-The calling process receives messages:
+The calling process then receives messages:
 
 ```elixir
 {:swim, :node_up,      {"10.0.0.2", 7771, "c1"}}  # node joined or recovered
@@ -169,8 +132,23 @@ The calling process receives messages:
 {:swim, :node_suspect, {"10.0.0.2", 7771, "c1"}}  # node missed a ping
 ```
 
+Handle them in your process loop:
+
+```elixir
+receive do
+  {:swim, :node_up, {host, port, _cookie}} ->
+    IO.puts("Node joined: #{host}:#{port}")
+
+  {:swim, :node_down, {host, port, _cookie}} ->
+    IO.puts("Node left: #{host}:#{port}")
+end
+```
+
 Dead subscriber processes are removed automatically via
 `Process.monitor/1`.
+
+For global logging or metrics without a dedicated subscriber
+process, attach a [Telemetry handler](#observability) instead.
 
 > **Restart caveat:** if the `Protocol` process crashes and is
 > restarted by its supervisor, the subscription list is lost because
@@ -196,7 +174,42 @@ For an ungraceful stop (no dead broadcast), call
 
 ---
 
-## Multiple instances
+## Configuration
+
+All options are passed to `SwimEx.Supervisor.start_link/1`.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `:host` | `String.t()` | **required** | This node's hostname or IP |
+| `:port` | `integer` | **required** | UDP port to bind |
+| `:cookie` | `string` | `""` | User-defined node cookie |
+| `:name` | `atom` | `:swim` | Instance name (for multi-cluster) |
+| `:seeds` | `[{host, port} \| {host, port, cookie}]` | `[]` | Seed nodes for join |
+| `:protocol_period` | `ms` | `1000` | How often to probe one peer |
+| `:ping_timeout` | `ms` | `200` | Direct ack wait time |
+| `:ping_req_fanout` | `integer` | `3` | Indirect ping relay count |
+| `:suspicion_timeout` | `ms` | `3000` | Suspect → dead delay |
+| `:seed_retry_interval` | `ms` | `5000` | Retry interval if no peers |
+| `:dead_node_expiry` | `ms` | `6000` | How long to keep dead entries |
+
+### Tuning for cluster size
+
+The defaults target an 8-node cluster. For larger
+clusters, scale timeouts with `log2(N)`:
+
+```elixir
+n = 50
+{SwimEx.Supervisor,
+ host: "10.0.0.1",
+ port: 7771,
+ protocol_period: 1000,
+ suspicion_timeout: ceil(:math.log2(n + 1)) * 1000,
+ dead_node_expiry:  ceil(:math.log2(n + 1)) * 2000}
+```
+
+---
+
+## Multiple Instances
 
 Run two independent SwimEx clusters in one BEAM by giving
 each a distinct `:name`:
@@ -213,12 +226,14 @@ SwimEx.subscribe(:cluster_b)
 
 ---
 
-## Telemetry
+## Observability
+
+### Telemetry
 
 swim_ex emits the following `:telemetry` events. Attach
 handlers using `:telemetry.attach/4`.
 
-### Membership events
+**Membership events**
 
 ```
 [:swim, :node, :up]       — node joined or recovered
@@ -229,7 +244,7 @@ handlers using `:telemetry.attach/4`.
 Metadata map: `%{node: {host, port, cookie}, peer: {host, port, cookie}}`
 (`node` = this node, `peer` = affected node).
 
-### Metric events
+**Metric events**
 
 ```
 [:swim, :ping, :rtt]        — ping round-trip time
@@ -241,7 +256,21 @@ Metadata map: `%{node: {host, port, cookie}, peer: {host, port, cookie}}`
 `[:swim, :cluster, :size]` carries `measurements: %{count: n}`.
 `[:swim, :message, :dropped]` carries `measurements: %{count: 1}`.
 
-### Example: Prometheus via telemetry_metrics
+**Example: attach a handler**
+
+```elixir
+:telemetry.attach(
+  "my-handler",
+  [:swim, :node, :up],
+  fn _name, _measurements, metadata, _config ->
+    {host, port, _} = metadata.peer
+    IO.puts("Telemetry: Node up #{host}:#{port}")
+  end,
+  nil
+)
+```
+
+**Example: Prometheus via telemetry_metrics**
 
 ```elixir
 # In your Telemetry supervisor:
@@ -255,9 +284,7 @@ def metrics do
 end
 ```
 
----
-
-## Logger metadata
+### Logger metadata
 
 All protocol log lines include structured metadata:
 
@@ -269,26 +296,6 @@ All protocol log lines include structured metadata:
 
 Configure a metadata-aware formatter (e.g. `LoggerJSON`)
 to expose these fields in structured logs.
-
----
-
-## Node identity and restarts
-
-A node is identified by `{host, port, cookie}`. Identity
-is **stable across restarts** — the same tuple reconnects
-as the same logical node. A different cookie on the same
-address is treated as a distinct node. Stale dead events
-from a previous incarnation are rejected because the
-restarted node seeds its incarnation number from
-`System.system_time(:millisecond)`, which is always
-higher than any incarnation from the prior run.
-
-> **NTP caveat:** if the system clock steps backward
-> (NTP correction) between a crash and restart, the
-> node's new incarnation may be lower than the stale
-> dead event. Membership recovery is delayed until the
-> clock overtakes the old value. Use NTP with `makestep`
-> rather than slewing to minimise this window.
 
 ---
 
